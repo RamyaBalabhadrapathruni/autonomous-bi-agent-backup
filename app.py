@@ -757,3 +757,4 @@ def create_chat(msg: Dict[str, Any]):
 
 @app.get("/ping")
 def ping():
+    return {"status": "ok"}
