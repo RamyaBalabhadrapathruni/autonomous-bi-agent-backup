@@ -5,6 +5,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Generator, Optional, List, Tuple
 
+import smtplib
+from email.mime.text import MIMEText
+
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -37,6 +40,14 @@ TREND_WINDOW = int(os.getenv("TREND_WINDOW", "3"))                     # rolling
 
 SEVERITY_MED_PCT = float(os.getenv("SEVERITY_MED_PCT", "0.15"))
 SEVERITY_HIGH_PCT = float(os.getenv("SEVERITY_HIGH_PCT", "0.30"))
+
+
+MAIL_ENABLED = os.getenv("MAIL_ENABLED", "false").lower() == "true"
+MAILTRAP_HOST = os.getenv("MAILTRAP_HOST")
+MAILTRAP_PORT = int(os.getenv("MAILTRAP_PORT", "587"))
+MAILTRAP_USERNAME = os.getenv("MAILTRAP_USERNAME")
+MAILTRAP_PASSWORD = os.getenv("MAILTRAP_PASSWORD")
+MAILTRAP_FROM = os.getenv("MAILTRAP_FROM", "noreply@example.com")
 
 # Fallback insight (so UI renders even if nothing triggers)
 INSIGHTS_FALLBACK_ENABLED = os.getenv("INSIGHTS_FALLBACK_ENABLED", "true").lower() == "true"
@@ -564,7 +575,19 @@ def process_dataset(dataset_id: str, job_id: str, text: str):
 
     c.execute("UPDATE jobs SET status=? WHERE id=?", ("done", job_id))
     conn.commit(); conn.close()
-    # --------------------------
+def send_mailtrap_email(to: str, subject: str, body: str):
+    if not MAIL_ENABLED:
+        raise RuntimeError("Mail sending is disabled via MAIL_ENABLED")
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = MAILTRAP_FROM
+    msg["To"] = to
+
+    with smtplib.SMTP(MAILTRAP_HOST, MAILTRAP_PORT) as server:
+        server.login(MAILTRAP_USERNAME, MAILTRAP_PASSWORD)
+        server.sendmail(MAILTRAP_FROM, [to], msg.as_string())
+# --------------------------
 # Live Insight REST & Stream
 # --------------------------
 @app.get("/live-insights")
@@ -758,3 +781,16 @@ def create_chat(msg: Dict[str, Any]):
 @app.get("/ping")
 def ping():
     return {"status": "ok"}
+
+@app.post("/send-email")
+def send_email_api(
+    to: str = Body(...),
+    subject: str = Body(...),
+    body: str = Body(...)
+):
+    try:
+        send_mailtrap_email(to, subject, body)
+        return {"status": "sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
