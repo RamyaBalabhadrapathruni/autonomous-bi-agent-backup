@@ -22,7 +22,18 @@ load_dotenv()
 # Config & Tunables
 # --------------------------
 DB_PATH = os.getenv("BI_DB_PATH", "/tmp/bi_agent.db")  # Render-compatible path
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX")  # optional
+ALLOW_CREDENTIALS = os.getenv("ALLOW_CREDENTIALS", "false").lower() == "true"
+
+cors_common = dict(allow_methods=["*"], allow_headers=["*"], expose_headers=["*"], max_age=86400)
+
+if ALLOW_ORIGIN_REGEX:
+    app.add_middleware(CORSMiddleware, allow_origin_regex=ALLOW_ORIGIN_REGEX, allow_credentials=False, **cors_common)
+else:
+    app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=ALLOW_CREDENTIALS, **cors_common)
+
 
 REVENUE_SPIKE_Z = float(os.getenv("REVENUE_SPIKE_Z", "1.0"))
 REVENUE_SPIKE_MIN_PCT = float(os.getenv("REVENUE_SPIKE_MIN_PCT", "0"))
@@ -595,3 +606,7 @@ def _get_dataset_meta(c, dataset_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Dataset schema not found")
     schema = json.loads(row["schema_json"])
     return {"schema": schema, "table": schema["table"]}
+
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
