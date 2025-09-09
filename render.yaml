@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: autonomous-bi-agent
+    env: python
+    plan: free   # or "starter" / "standard" depending on your needs
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn -k uvicorn.workers.UvicornWorker app:app --bind 0.0.0.0:$PORT --workers 4
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: HITL_ENABLED
+        value: "true"   # default: HITL mode on, can toggle in UI
+      - key: SMTP_USERNAME
+        sync: false     # for Mailtrap or your sandbox
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        value: sandbox.smtp.mailtrap.io
+      - key: SMTP_PORT
+        value: "2525"
+      - key: SLACK_WEBHOOK_URL
+        sync: false
