@@ -1,10 +1,10 @@
 # --- Web framework ---
 fastapi==0.112.2
-uvicorn[standard]==0.30.6
-gunicorn==21.2.0
+uvicorn==0.23.2
+python-dotenv==1.1.1
 
 # --- Core data libs ---
-pandas==2.2.2
+pandas==2.1.1
 
 # --- LangChain + LLM stack ---
 langchain==0.3.2
@@ -24,3 +24,4 @@ python-dotenv==1.0.1
 
 # --- Integrations ---
 requests==2.32.3
+
