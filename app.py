@@ -29,12 +29,6 @@ ALLOW_CREDENTIALS = os.getenv("ALLOW_CREDENTIALS", "false").lower() == "true"
 
 cors_common = dict(allow_methods=["*"], allow_headers=["*"], expose_headers=["*"], max_age=86400)
 
-if ALLOW_ORIGIN_REGEX:
-    app.add_middleware(CORSMiddleware, allow_origin_regex=ALLOW_ORIGIN_REGEX, allow_credentials=False, **cors_common)
-else:
-    app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=ALLOW_CREDENTIALS, **cors_common)
-
-
 REVENUE_SPIKE_Z = float(os.getenv("REVENUE_SPIKE_Z", "1.0"))
 REVENUE_SPIKE_MIN_PCT = float(os.getenv("REVENUE_SPIKE_MIN_PCT", "0"))
 
@@ -73,13 +67,32 @@ app = FastAPI(
     redirect_slashes=False,  
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS or ["*"],
-    allow_credentials=False,
+
+# --------------------------
+# Add CORS middleware AFTER app exists
+# --------------------------
+cors_common = dict(
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
+
+if ALLOW_ORIGIN_REGEX:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=ALLOW_ORIGIN_REGEX,
+        allow_credentials=False,
+        **cors_common,
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=ALLOW_CREDENTIALS,
+        **cors_common,
+    )
+
 
 executor = ThreadPoolExecutor(max_workers=4)
 main_loop: Optional[asyncio.AbstractEventLoop] = None
