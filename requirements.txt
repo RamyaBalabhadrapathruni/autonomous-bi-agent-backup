@@ -4,10 +4,8 @@ uvicorn[standard]==0.30.6
 
 # --- Core data libs ---
 pandas==2.2.2
-duckdb==0.10.3
 
-# --- Vector + LLM stack ---
-faiss-cpu==1.8.0.post1
+# --- LangChain + LLM stack ---
 langchain==0.3.2
 langchain-core==0.3.8
 langchain-community==0.3.2
@@ -15,15 +13,13 @@ langchain-google-genai==2.0.5
 google-generativeai==0.7.2
 pydantic==2.8.2
 
-# --- File upload & formats (/upload-data) ---
+# --- File upload & formats ---
 python-multipart==0.0.9
 openpyxl==3.1.5
 pyarrow==17.0.0
 
-# --- Config, metrics, tracing ---
+# --- Config ---
 python-dotenv==1.0.1
-prometheus-fastapi-instrumentator==7.0.0
-opentelemetry-instrumentation-fastapi==0.47b0
 
 # --- Integrations used in code (/send-initial-response) ---
 requests==2.32.3
