@@ -20,5 +20,7 @@ services:
         value: sandbox.smtp.mailtrap.io
       - key: SMTP_PORT
         value: "2525"
+      - key: EMAIL_FROM
+        value: "test@myapp.local"   # added for Mailtrap emails
       - key: SLACK_WEBHOOK_URL
         sync: false
