@@ -16,6 +16,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 # -----------------------------
 app = FastAPI(title="Autonomous BI Agent")
 
+# Load SMTP environment variables
+SMTP_HOST = os.environ['SMTP_HOST']
+SMTP_PORT = int(os.environ['SMTP_PORT'])
+SMTP_USERNAME = os.environ['SMTP_USERNAME']
+SMTP_PASSWORD = os.environ['SMTP_PASSWORD']
+EMAIL_FROM = os.environ['EMAIL_FROM']
+
 # Enable CORS (so UI can connect)
 app.add_middleware(
     CORSMiddleware,
@@ -274,3 +281,25 @@ async def hitl_status():
     mode = "Human-in-the-Loop" if HITL_ENABLED else "Autonomous"
     return {"HITL_ENABLED": HITL_ENABLED, "mode": mode}
 
+@app.get("/")
+async def read_root():
+    return {"message": "Hello! App is running."}
+
+@app.get("/send-test-email")
+async def send_test_email():
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'Test Email from FastAPI'
+        msg['From'] = EMAIL_FROM
+        msg['To'] = 'recipient@example.com'  # any email for testing
+        msg.set_content('Hello from Mailtrap SMTP!')
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+
+        return {"status": "success", "message": "Email sent!"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
