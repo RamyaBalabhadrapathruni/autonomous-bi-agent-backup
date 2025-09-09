@@ -127,12 +127,14 @@ def send_initial_response(agent: str, message: str, medium: str = "console"):
 # -----------------------------
 @tool
 def anomaly_tool(data: str, metric: str) -> str:
+    """Detect univariate anomalies in CSV data for the given metric."""
     df = pd.read_csv(data)
     result = detect_univariate_anomalies(df, metric)
     return json.dumps(result)
 
 @tool
 def trend_tool(data: str, metric: str) -> str:
+    """Detect trends (increasing or decreasing) in CSV data for the given metric."""
     df = pd.read_csv(data)
     result = detect_trends(df, metric)
     return json.dumps(result)
