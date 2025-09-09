@@ -126,16 +126,27 @@ def send_initial_response(agent: str, message: str, medium: str = "console"):
 # LANGCHAIN TOOLS
 # -----------------------------
 @tool
-def anomaly_tool(data: str, metric: str) -> str:
-    """Detect univariate anomalies in CSV data for the given metric."""
-    df = pd.read_csv(data)
+def anomaly_tool(input_str: str) -> str:
+    """
+    Detect univariate anomalies in CSV data.
+    input_str should be a JSON string with keys:
+    {"file_path": "...", "metric": "..."}
+    """
+    args = json.loads(input_str)
+    df = pd.read_csv(args["file_path"])
+    metric = args["metric"]
     result = detect_univariate_anomalies(df, metric)
     return json.dumps(result)
 
 @tool
-def trend_tool(data: str, metric: str) -> str:
-    """Detect trends (increasing or decreasing) in CSV data for the given metric."""
-    df = pd.read_csv(data)
+def trend_tool(input_str: str) -> str:
+    """
+    Detect trends (increasing/decreasing) in CSV data.
+    input_str should be a JSON string: {"file_path": "...", "metric": "..."}
+    """
+    args = json.loads(input_str)
+    df = pd.read_csv(args["file_path"])
+    metric = args["metric"]
     result = detect_trends(df, metric)
     return json.dumps(result)
 
