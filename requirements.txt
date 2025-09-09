@@ -24,6 +24,12 @@ python-dotenv==1.1.1
 requests==2.32.3
 
 
+# --- Optional SQLite async support ---
+aiosqlite==0.20.0
+
+
+
+
 
 
 
