@@ -1,7 +1,7 @@
-# app.py — Autonomous BI Agent API (Gemini + FastAPI + Render-ready)
+# app.py — Autonomous BI Agent API (FastAPI + Render-ready)
 
-import os, io, csv, json, uuid, time, asyncio, math, statistics, sqlite3, re
-from datetime import datetime, timedelta, date
+import os, io, csv, json, uuid, asyncio, math, statistics, sqlite3
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Generator, Optional, List, Tuple
 
@@ -11,68 +11,134 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-import smtplib
-from email.mime.text import MIMEText
+# Optional: Gemini (kept as-is if you enable it via env)
 import google.generativeai as genai
 
+# --------------------------
 # Load environment variables
+# --------------------------
 load_dotenv()
 
-# --------------------------
-# Config & Tunables
-# --------------------------
+# Storage / DB
 DB_PATH = os.getenv("BI_DB_PATH", "/tmp/bi_agent.db")  # Render-compatible path
 
-
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://app.base44.com").split(",") if o.strip()]
+# CORS
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX")
 ALLOW_CREDENTIALS = os.getenv("ALLOW_CREDENTIALS", "false").lower() == "true"
 
+# Insight thresholds & windows (all env-driven)
+REVENUE_SPIKE_Z = float(os.getenv("REVENUE_SPIKE_Z", "1.0"))          # Z-score threshold
+REVENUE_SPIKE_MIN_PCT = float(os.getenv("REVENUE_SPIKE_MIN_PCT", "0"))# MoM min % change
+REVENUE_SPIKE_WINDOW = int(os.getenv("REVENUE_SPIKE_WINDOW", "6"))     # compare last vs prior N
 
-cors_common = dict(allow_methods=["*"], allow_headers=["*"], expose_headers=["*"], max_age=86400)
-
-REVENUE_SPIKE_Z = float(os.getenv("REVENUE_SPIKE_Z", "1.0"))
-REVENUE_SPIKE_MIN_PCT = float(os.getenv("REVENUE_SPIKE_MIN_PCT", "0"))
-
-TREND_MIN_POINTS = int(os.getenv("TREND_MIN_POINTS", "3"))
-TREND_WINDOW = int(os.getenv("TREND_WINDOW", "3"))
+TREND_MIN_POINTS = int(os.getenv("TREND_MIN_POINTS", "3"))             # minimal points to compute trend
+TREND_WINDOW = int(os.getenv("TREND_WINDOW", "3"))                     # rolling window for trend
 
 SEVERITY_MED_PCT = float(os.getenv("SEVERITY_MED_PCT", "0.15"))
 SEVERITY_HIGH_PCT = float(os.getenv("SEVERITY_HIGH_PCT", "0.30"))
 
+# Fallback insight (so UI renders even if nothing triggers)
+INSIGHTS_FALLBACK_ENABLED = os.getenv("INSIGHTS_FALLBACK_ENABLED", "true").lower() == "true"
+
+# Human-in-the-loop default
 HITL_DEFAULT = os.getenv("HITL_DEFAULT", "false").lower() == "true"
 
+# LLM (optional)
 USE_LLM = os.getenv("USE_LLM", "false").lower() == "true"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-MAILTRAP_HOST = os.getenv("MAILTRAP_HOST", "smtp.mailtrap.io")
-MAILTRAP_PORT = int(os.getenv("MAILTRAP_PORT", "587"))
-MAILTRAP_USERNAME = os.getenv("MAILTRAP_USERNAME")
-MAILTRAP_PASSWORD = os.getenv("MAILTRAP_PASSWORD")
-MAILTRAP_FROM = os.getenv("MAILTRAP_FROM", "alerts@example.com")
-ALERT_RECIPIENTS = [e.strip() for e in os.getenv("ALERT_RECIPIENTS", "").split(",") if e.strip()]
-ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")  # Optional — safe to omit
-
-# Gemini setup
 if USE_LLM and GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# --------------------------
-# App & CORS
-# --------------------------
+# Column aliasing (extendable via env)
+# Provide extra aliases using JSON in NUMERIC_ALIASES_JSON if you want
+DEFAULT_NUMERIC_ALIASES = {
+    "revenue": ["revenue", "sales", "gmv", "amount", "turnover"],
+    "tickets": ["tickets", "orders", "transactions", "bookings", "requests", "units", "qty", "quantity"]
+}
+try:
+    NUMERIC_ALIASES = json.loads(os.getenv("NUMERIC_ALIASES_JSON", "")) or DEFAULT_NUMERIC_ALIASES
+    # Ensure keys exist
+    for k in ("revenue", "tickets"):
+        NUMERIC_ALIASES.setdefault(k, DEFAULT_NUMERIC_ALIASES[k])
+except Exception:
+    NUMERIC_ALIASES = DEFAULT_NUMERIC_ALIASES
+# app.py — Autonomous BI Agent API (FastAPI + Render-ready)
 
+import os, io, csv, json, uuid, asyncio, math, statistics, sqlite3
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, Generator, Optional, List, Tuple
+
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Optional: Gemini (kept as-is if you enable it via env)
+import google.generativeai as genai
+
+# --------------------------
+# Load environment variables
+# --------------------------
+load_dotenv()
+
+# Storage / DB
+DB_PATH = os.getenv("BI_DB_PATH", "/tmp/bi_agent.db")  # Render-compatible path
+
+# CORS
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX")
+ALLOW_CREDENTIALS = os.getenv("ALLOW_CREDENTIALS", "false").lower() == "true"
+
+# Insight thresholds & windows (all env-driven)
+REVENUE_SPIKE_Z = float(os.getenv("REVENUE_SPIKE_Z", "1.0"))          # Z-score threshold
+REVENUE_SPIKE_MIN_PCT = float(os.getenv("REVENUE_SPIKE_MIN_PCT", "0"))# MoM min % change
+REVENUE_SPIKE_WINDOW = int(os.getenv("REVENUE_SPIKE_WINDOW", "6"))     # compare last vs prior N
+
+TREND_MIN_POINTS = int(os.getenv("TREND_MIN_POINTS", "3"))             # minimal points to compute trend
+TREND_WINDOW = int(os.getenv("TREND_WINDOW", "3"))                     # rolling window for trend
+
+SEVERITY_MED_PCT = float(os.getenv("SEVERITY_MED_PCT", "0.15"))
+SEVERITY_HIGH_PCT = float(os.getenv("SEVERITY_HIGH_PCT", "0.30"))
+
+# Fallback insight (so UI renders even if nothing triggers)
+INSIGHTS_FALLBACK_ENABLED = os.getenv("INSIGHTS_FALLBACK_ENABLED", "true").lower() == "true"
+
+# Human-in-the-loop default
+HITL_DEFAULT = os.getenv("HITL_DEFAULT", "false").lower() == "true"
+
+# LLM (optional)
+USE_LLM = os.getenv("USE_LLM", "false").lower() == "true"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if USE_LLM and GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+# Column aliasing (extendable via env)
+# Provide extra aliases using JSON in NUMERIC_ALIASES_JSON if you want
+DEFAULT_NUMERIC_ALIASES = {
+    "revenue": ["revenue", "sales", "gmv", "amount", "turnover"],
+    "tickets": ["tickets", "orders", "transactions", "bookings", "requests", "units", "qty", "quantity"]
+}
+try:
+    NUMERIC_ALIASES = json.loads(os.getenv("NUMERIC_ALIASES_JSON", "")) or DEFAULT_NUMERIC_ALIASES
+    # Ensure keys exist
+    for k in ("revenue", "tickets"):
+        NUMERIC_ALIASES.setdefault(k, DEFAULT_NUMERIC_ALIASES[k])
+except Exception:
+    NUMERIC_ALIASES = DEFAULT_NUMERIC_ALIASES
+# --------------------------
+# FastAPI app & CORS
+# --------------------------
 app = FastAPI(
     title="Autonomous BI Agent API",
     docs_url="/docs",
     redoc_url=None,
     openapi_url="/openapi.json",
-    redirect_slashes=False,  
+    redirect_slashes=False,
 )
 
-
-# --------------------------
-# Add CORS middleware AFTER app exists
-# --------------------------
 cors_common = dict(
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,26 +150,17 @@ if ALLOW_ORIGIN_REGEX:
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=ALLOW_ORIGIN_REGEX,
-        allow_credentials=False,
-        **cors_common,
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
         allow_credentials=ALLOW_CREDENTIALS,
         **cors_common,
     )
-
-
-executor = ThreadPoolExecutor(max_workers=4)
-main_loop: Optional[asyncio.AbstractEventLoop] = None
-
-@app.on_event("startup")
-async def on_startup():
-    global main_loop
-    main_loop = asyncio.get_running_loop()
-    init_db()
+else:
+    # If ALLOWED_ORIGINS is empty, default to "*" (no hardcoding)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
+        allow_credentials=ALLOW_CREDENTIALS,
+        **cors_common,
+    )
 # --------------------------
 # Database Setup
 # --------------------------
@@ -116,18 +173,21 @@ def init_db():
     conn = db(); c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)""")
     c.execute("""INSERT OR IGNORE INTO settings (k, v) VALUES ('hitl', ?)""", (json.dumps(HITL_DEFAULT),))
+
     c.execute("""CREATE TABLE IF NOT EXISTS datasets (
         id TEXT PRIMARY KEY,
         filename TEXT,
         bytes INTEGER,
         created_at TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
         dataset_id TEXT,
         status TEXT,
         created_at TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS insights (
         id TEXT PRIMARY KEY,
         dataset_id TEXT,
@@ -138,6 +198,7 @@ def init_db():
         severity TEXT,
         ts TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT,
@@ -146,6 +207,7 @@ def init_db():
         status TEXT,
         last_active TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS chat (
         id TEXT PRIMARY KEY,
         session_id TEXT,
@@ -154,6 +216,7 @@ def init_db():
         message TEXT,
         ts TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS reviews (
         id TEXT PRIMARY KEY,
         title TEXT,
@@ -162,17 +225,28 @@ def init_db():
         priority TEXT,
         ts TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS dataset_schema (
         dataset_id TEXT PRIMARY KEY,
         schema_json TEXT NOT NULL
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS ds_value_index (
         dataset_id TEXT NOT NULL,
         col TEXT NOT NULL,
         value_lower TEXT NOT NULL
     )""")
+
     conn.commit(); conn.close()
 
+executor = ThreadPoolExecutor(max_workers=4)
+main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+@app.on_event("startup")
+async def on_startup():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+    init_db()
 # --------------------------
 # SSE Broker (Live Stream)
 # --------------------------
@@ -225,8 +299,8 @@ MONTHS = {m.lower(): i for i, m in enumerate(
     ["January","February","March","April","May","June","July","August","September","October","November","December"], start=1)}
 MONTHS.update({k[:3]: v for k, v in list(MONTHS.items()) if len(k) > 3})
 
-def _try_parse_date(s: str, ref_year: Optional[int] = None) -> Optional[datetime]:
-    if s is None:
+def _try_parse_date(s: Optional[str], ref_year: Optional[int] = None) -> Optional[datetime]:
+    if not s:
         return None
     st = s.strip().replace("\\-", "-").replace(",", " ")
     parts = st.split()
@@ -234,8 +308,7 @@ def _try_parse_date(s: str, ref_year: Optional[int] = None) -> Optional[datetime
         y = ref_year if ref_year else datetime.utcnow().year
         return datetime(y, MONTHS[parts[0].lower()], 1)
     if len(parts) == 2 and parts[0].lower() in MONTHS and parts[1].isdigit():
-        y = int(parts[1])
-        return datetime(y, MONTHS[parts[0].lower()], 1)
+        y = int(parts[1]);  return datetime(y, MONTHS[parts[0].lower()], 1)
     for fmt in DATE_FORMATS:
         try:
             dt = datetime.strptime(st, fmt)
@@ -244,6 +317,13 @@ def _try_parse_date(s: str, ref_year: Optional[int] = None) -> Optional[datetime
             return dt
         except Exception:
             continue
+    return None
+
+def _first_present(row: Dict[str, Any], keys: List[str]):
+    for k in keys:
+        v = row.get(k)
+        if v not in (None, "", "null", "None"):
+            return v
     return None
 
 def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
@@ -263,8 +343,9 @@ def _parse_csv_rows(text: str) -> List[Dict[str, Any]]:
             except Exception:
                 return None
 
-        revenue = _num(row.get("revenue"))
-        tickets = _num(row.get("tickets"))
+        # Alias-aware extraction
+        revenue = _num(_first_present(row, NUMERIC_ALIASES["revenue"]))
+        tickets = _num(_first_present(row, NUMERIC_ALIASES["tickets"]))
 
         rows.append({
             "region": row.get("region"),
@@ -300,16 +381,106 @@ def _percent_change(new: float, old: float) -> Optional[float]:
 def _normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2)))
 
-def _severity_from_pct(pct: float) -> str:
+def _severity_from_pct(pct: Optional[float]) -> str:
+    if pct is None:
+        return "low"
     abs_pct = abs(pct)
-    if abs_pct >= SEVERITY_HIGH_PCT:
-        return "high"
-    if abs_pct >= SEVERITY_MED_PCT:
-        return "medium"
+    if abs_pct >= SEVERITY_HIGH_PCT: return "high"
+    if abs_pct >= SEVERITY_MED_PCT:  return "medium"
     return "low"
+# --------------------------
+# Insight Computation
+# --------------------------
+def _linreg_slope_r2(values: List[float]) -> Tuple[float, float]:
+    x = list(range(len(values)))
+    y = values
+    mx, my = statistics.fmean(x), statistics.fmean(y)
+    cov = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
+    vx = sum((xi - mx) ** 2 for xi in x)
+    vy = sum((yi - my) ** 2 for yi in y)
+    slope = cov / vx if vx > 0 else 0.0
+    r2 = (cov ** 2) / (vx * vy) if vx > 0 and vy > 0 else 0.0
+    return slope, r2
+
+def _compute_trend_insight(dataset_id: str,
+                           tickets_series: List[Dict[str, Any]],
+                           revenue_series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    # Prefer tickets if has signal; else revenue
+    def _vals(s): return [r["value"] for r in s if r["value"] is not None]
+    def _has_signal(s):
+        vals = _vals(s); 
+        return len(vals) >= TREND_MIN_POINTS and (max(vals) - min(vals) > 1e-9)
+
+    series = tickets_series if _has_signal(tickets_series) else revenue_series
+    measure = "tickets" if series is tickets_series and _has_signal(tickets_series) else "revenue"
+    vals = _vals(series)
+    if len(vals) < TREND_MIN_POINTS:
+        return None
+
+    k = max(TREND_MIN_POINTS, min(TREND_WINDOW, len(vals)))
+    window = vals[-k:]
+    slope, r2 = _linreg_slope_r2(window)
+    if abs(slope) < 1e-6:
+        return None
+
+    direction = "upward" if slope > 0 else "downward"
+    return {
+        "id": str(uuid.uuid4()),
+        "dataset_id": dataset_id,
+        "type": "trend",
+        "title": "Trend detected",
+        "description": f"{measure.capitalize()} show a {direction} trend over the last {k} periods (slope {slope:.2f}, R²={r2:.2f}).",
+        "confidence": min(1.0, max(0.1, abs(slope)) * 10),
+        "severity": "medium",
+        "ts": datetime.utcnow().isoformat()
+    }
+
+def _compute_revenue_spike_insight(dataset_id: str,
+                                   revenue_series: List[Dict[str, Any]],
+                                   window: int = None) -> Optional[Dict[str, Any]]:
+    w = window if window is not None else REVENUE_SPIKE_WINDOW
+    if len(revenue_series) < max(3, w + 1):
+        return None
+    values = [r["value"] for r in revenue_series if r["value"] is not None]
+    if len(values) < max(3, w + 1):
+        return None
+
+    last = values[-1]
+    hist = values[-(w + 1):-1]
+    mean = statistics.fmean(hist)
+    stdev = statistics.stdev(hist) if len(hist) >= 2 else 0
+    z = (last - mean) / stdev if stdev > 0 else 0
+    pct = _percent_change(last, hist[-1]) if hist else 0
+
+    if z >= REVENUE_SPIKE_Z and (pct is None or abs(pct) >= REVENUE_SPIKE_MIN_PCT):
+        return {
+            "id": str(uuid.uuid4()),
+            "dataset_id": dataset_id,
+            "type": "revenue_spike",
+            "title": "Revenue spike detected",
+            "description": f"Latest revenue {last:.2f} is {z:.2f}σ above the prior {w}-period average.",
+            "confidence": _normal_cdf(z),
+            "severity": _severity_from_pct(pct),
+            "ts": datetime.utcnow().isoformat()
+        }
+    return None
 # --------------------------
 # Dataset Upload & Processing
 # --------------------------
+class _Async:
+    @staticmethod
+    def run_in_loop(coro):
+        asyncio.run_coroutine_threadsafe(coro, main_loop)
+
+def _publish_insight(dataset_id: str, conn, c, ins: Dict[str, Any]):
+    ins["timestamp"] = ins.pop("ts", datetime.utcnow().isoformat())
+    c.execute("""INSERT INTO insights (id, dataset_id, type, title, description, confidence, severity, ts)
+                 VALUES (?,?,?,?,?,?,?,?)""",
+              (ins["id"], ins["dataset_id"], ins["type"], ins["title"], ins["description"],
+               ins["confidence"], ins["severity"], ins["timestamp"]))
+    conn.commit()
+    return broker.publish(dataset_id, {"insight": ins})
+
 @app.post("/upload-file", response_model=UploadResult)
 async def upload_file(file: UploadFile = File(...)):
     content = await file.read()
@@ -340,13 +511,27 @@ def process_dataset(dataset_id: str, job_id: str, text: str):
     c.execute("UPDATE jobs SET status=? WHERE id=?", ("processing", job_id))
     conn.commit()
 
-    _publish_from_thread(broker.publish(dataset_id, {"insight": {
+    _Async.run_in_loop(broker.publish(dataset_id, {"insight": {
         "id": str(uuid.uuid4()), "dataset_id": dataset_id, "type": "info",
         "title": "Dataset received", "description": "Processing has started",
         "confidence": 1.0, "severity": "low", "timestamp": datetime.utcnow().isoformat()
     }}))
 
+    # Parse and persist
     rows = _parse_csv_rows(text)
+    if not rows:
+        # Persist a helpful insight for the UI if parsing failed
+        if INSIGHTS_FALLBACK_ENABLED:
+            _Async.run_in_loop(_publish_insight(dataset_id, conn, c, {
+                "id": str(uuid.uuid4()), "dataset_id": dataset_id, "type": "error",
+                "title": "No parsable rows",
+                "description": "We could not parse any rows. Ensure your CSV has a 'date' column and numeric 'revenue' and/or 'orders'.",
+                "confidence": 0.9, "severity": "high", "ts": datetime.utcnow().isoformat()
+            }))
+        c.execute("UPDATE jobs SET status=? WHERE id=?", ("done", job_id))
+        conn.commit(); conn.close()
+        return
+
     _ensure_dataset_table_generic(conn, c, dataset_id, rows)
 
     totals = _aggregate_timeseries(rows)
@@ -357,30 +542,30 @@ def process_dataset(dataset_id: str, job_id: str, text: str):
     rev_spike = _compute_revenue_spike_insight(dataset_id, revenue_series)
     if rev_spike:
         insights.append(rev_spike)
-    trend = _compute_acquisition_trend_insight(dataset_id, tickets_series)
+
+    trend = _compute_trend_insight(dataset_id, tickets_series, revenue_series)
     if trend:
         insights.append(trend)
 
+    if not insights and INSIGHTS_FALLBACK_ENABLED:
+        insights.append({
+            "id": str(uuid.uuid4()),
+            "dataset_id": dataset_id,
+            "type": "info",
+            "title": "No anomalies detected",
+            "description": "Data ingested successfully; no significant spikes or trends detected with current thresholds.",
+            "confidence": 0.5,
+            "severity": "low",
+            "ts": datetime.utcnow().isoformat()
+        })
+
     for ins in insights:
-        _publish_from_thread(_publish_insight(dataset_id, conn, c, ins))
+        _Async.run_in_loop(_publish_insight(dataset_id, conn, c, ins))
 
     c.execute("UPDATE jobs SET status=? WHERE id=?", ("done", job_id))
     conn.commit(); conn.close()
-
-def _publish_from_thread(coro):
-    asyncio.run_coroutine_threadsafe(coro, main_loop)
-
-def _publish_insight(dataset_id: str, conn, c, ins: Dict[str, Any]):
-    ins["timestamp"] = ins.pop("ts", datetime.utcnow().isoformat())
-    c.execute("""INSERT INTO insights (id, dataset_id, type, title, description, confidence, severity, ts)
-                 VALUES (?,?,?,?,?,?,?,?)""",
-              (ins["id"], ins["dataset_id"], ins["type"], ins["title"], ins["description"],
-               ins["confidence"], ins["severity"], ins["timestamp"]))
-    conn.commit()
-    return broker.publish(dataset_id, {"insight": ins})
-
-# --------------------------
-# LiveInsight REST & Stream
+    # --------------------------
+# Live Insight REST & Stream
 # --------------------------
 @app.get("/live-insights")
 def get_insights(dataset_id: str):
@@ -414,11 +599,51 @@ async def insights_stream(request: Request, dataset_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
     )
+
+# --------------------------
+# Dataset Table Creation / Schema
+# --------------------------
+def _ensure_dataset_table_generic(conn, c, dataset_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sample = rows[0]
+    columns = sample.keys()
+    col_types = {}
+    for col in columns:
+        values = [r[col] for r in rows if r.get(col) is not None]
+        if all(isinstance(v, (int, float)) for v in values):
+            col_types[col] = "REAL"
+        else:
+            col_types[col] = "TEXT"
+
+    table_name = f"ds_{dataset_id.replace('-', '')}"
+    ddl = ", ".join(f"{col} {col_types[col]}" for col in columns)
+    c.execute(f"DROP TABLE IF EXISTS {table_name}")
+    c.execute(f"CREATE TABLE {table_name} ({ddl})")
+
+    placeholders = ",".join(["?"] * len(columns))
+    values = [[r.get(col) for col in columns] for r in rows]
+    c.executemany(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})", values)
+
+    schema_json = json.dumps({
+        "table": table_name,
+        "col_map": {col: col for col in columns},
+        "measures": [col for col in columns if col_types[col] == "REAL"],
+        "dimensions": [col for col in columns if col_types[col] == "TEXT"]
+    })
+    c.execute("INSERT OR REPLACE INTO dataset_schema (dataset_id, schema_json) VALUES (?, ?)", (dataset_id, schema_json))
+    conn.commit()
+    return json.loads(schema_json)
+
+def _get_dataset_meta(c, dataset_id: str) -> Dict[str, Any]:
+    row = c.execute("SELECT schema_json FROM dataset_schema WHERE dataset_id=?", (dataset_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Dataset schema not found")
+    schema = json.loads(row["schema_json"])
+    return {"schema": schema, "table": schema["table"]}
 # --------------------------
 # Conversational QA (Gemini + SQL)
 # --------------------------
 def _is_safe_select(sql: str) -> bool:
-    s = sql.strip().upper()
+    s = (sql or "").strip().upper()
     if not s.startswith(("WITH", "SELECT", "PRAGMA TABLE_INFO")):
         return False
     for bad in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "ATTACH", "DETACH", "CREATE", "REPLACE", ";--"):
@@ -513,11 +738,9 @@ def list_chat(session_id: Optional[str] = None, dataset_id: Optional[str] = None
     q = "SELECT id, session_id, dataset_id, role as type, message, ts as timestamp FROM chat WHERE 1=1"
     params: List[Any] = []
     if session_id:
-        q += " AND session_id=?"
-        params.append(session_id)
+        q += " AND session_id=?"; params.append(session_id)
     if dataset_id:
-        q += " AND dataset_id=?"
-        params.append(dataset_id)
+        q += " AND dataset_id=?"; params.append(dataset_id)
     q += " ORDER BY ts ASC"
     rows = [dict(r) for r in c.execute(q, params).fetchall()]
     conn.close()
@@ -531,104 +754,6 @@ def create_chat(msg: Dict[str, Any]):
                msg.get("message"), datetime.utcnow().isoformat()))
     conn.commit(); conn.close()
     return {"ok": True}
-# --------------------------
-# Revenue Spike Detection
-# --------------------------
-def _compute_revenue_spike_insight(dataset_id: str, series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if len(series) < 3:
-        return None
-    values = [r["value"] for r in series if r["value"] is not None]
-    if len(values) < 3:
-        return None
-    mean = statistics.fmean(values)
-    stdev = statistics.stdev(values)
-    last = values[-1]
-    z = (last - mean) / stdev if stdev > 0 else 0
-    pct = _percent_change(last, values[-2]) if len(values) >= 2 else 0
-    if z >= REVENUE_SPIKE_Z and abs(pct) >= REVENUE_SPIKE_MIN_PCT:
-        return {
-            "id": str(uuid.uuid4()),
-            "dataset_id": dataset_id,
-            "type": "revenue_spike",
-            "title": "Revenue spike detected",
-            "description": f"Latest revenue is {last:.2f}, which is {z:.2f} standard deviations above the mean.",
-            "confidence": _normal_cdf(z),
-            "severity": _severity_from_pct(pct),
-            "ts": datetime.utcnow().isoformat()
-        }
-    return None
-
-# --------------------------
-# Acquisition Trend Detection
-# --------------------------
-def _compute_acquisition_trend_insight(dataset_id: str, series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if len(series) < TREND_MIN_POINTS:
-        return None
-    x = list(range(len(series)))
-    y = [r["value"] for r in series]
-    if any(v is None for v in y):
-        return None
-    mx, my = statistics.fmean(x), statistics.fmean(y)
-    cov = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
-    vx = sum((xi - mx) ** 2 for xi in x)
-    slope = cov / vx if vx > 0 else 0
-    r2 = (cov ** 2) / (vx * sum((yi - my) ** 2 for yi in y)) if vx > 0 else 0
-    if abs(slope) < 1e-3:
-        return None
-    direction = "upward" if slope > 0 else "downward"
-    return {
-        "id": str(uuid.uuid4()),
-        "dataset_id": dataset_id,
-        "type": "trend",
-        "title": "Acquisition trend detected",
-        "description": f"Tickets show a {direction} trend with slope {slope:.2f} and R²={r2:.2f}.",
-        "confidence": min(1.0, abs(slope) * 10),
-        "severity": "medium",
-        "ts": datetime.utcnow().isoformat()
-    }
-
-# --------------------------
-# Dataset Table Creation
-# --------------------------
-def _ensure_dataset_table_generic(conn, c, dataset_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    if not rows:
-        raise HTTPException(status_code=400, detail="No rows parsed from uploaded file.")
-    sample = rows[0]
-    columns = sample.keys()
-    col_types = {}
-    for col in columns:
-        values = [r[col] for r in rows if r.get(col) is not None]
-        if all(isinstance(v, (int, float)) for v in values):
-            col_types[col] = "REAL"
-        else:
-            col_types[col] = "TEXT"
-
-    table_name = f"ds_{dataset_id.replace('-', '')}"
-    ddl = ", ".join(f"{col} {col_types[col]}" for col in columns)
-    c.execute(f"DROP TABLE IF EXISTS {table_name}")
-    c.execute(f"CREATE TABLE {table_name} ({ddl})")
-
-    placeholders = ",".join(["?"] * len(columns))
-    values = [[r.get(col) for col in columns] for r in rows]
-    c.executemany(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})", values)
-
-    schema_json = json.dumps({
-        "table": table_name,
-        "col_map": {col: col for col in columns},
-        "measures": [col for col in columns if col_types[col] == "REAL"],
-        "dimensions": [col for col in columns if col_types[col] == "TEXT"]
-    })
-    c.execute("INSERT OR REPLACE INTO dataset_schema (dataset_id, schema_json) VALUES (?, ?)", (dataset_id, schema_json))
-    conn.commit()
-    return json.loads(schema_json)
-
-def _get_dataset_meta(c, dataset_id: str) -> Dict[str, Any]:
-    row = c.execute("SELECT schema_json FROM dataset_schema WHERE dataset_id=?", (dataset_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Dataset schema not found")
-    schema = json.loads(row["schema_json"])
-    return {"schema": schema, "table": schema["table"]}
 
 @app.get("/ping")
 def ping():
-    return {"status": "ok"}
