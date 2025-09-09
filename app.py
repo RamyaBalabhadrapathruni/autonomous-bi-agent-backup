@@ -231,3 +231,357 @@ def _compute_revenue_spike_insight(dataset_id: str, series: List[Dict[str, Any]]
 
     is_spike = (last_pct > 0) and (z >= REVENUE_SPIKE_Z) and (abs(last_pct) >= REVENUE_SPIKE_MIN_PCT)
     if not is_spike:
+        return None
+
+    confidence = _normal_cdf(abs(z))  # higher z => higher confidence
+    sev = _severity_from_pct(last_pct)
+    ts = datetime.utcnow().isoformat()
+
+    return {
+        "id": str(uuid.uuid4()),
+        "dataset_id": dataset_id,
+        "type": "anomaly",
+        "title": "Revenue Spike Detected",
+        "description": f"{round(last_pct*100, 1)}% increase vs prior period",
+        "confidence": round(confidence, 2),
+        "severity": sev,
+        "timestamp": ts,
+    }
+
+def _linear_regression(x: List[float], y: List[float]) -> Dict[str, float]:
+    """
+    Simple OLS for slope/intercept/r without numpy.
+    """
+    n = len(x)
+    if n == 0 or n != len(y):
+        return {"slope": 0.0, "intercept": 0.0, "r": 0.0, "r2": 0.0}
+    mean_x = statistics.fmean(x)
+    mean_y = statistics.fmean(y)
+    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+    var_x = sum((xi - mean_x) ** 2 for xi in x)
+    var_y = sum((yi - mean_y) ** 2 for yi in y)
+    slope = cov / var_x if var_x > 1e-12 else 0.0
+    intercept = mean_y - slope * mean_x
+    r = cov / math.sqrt(var_x * var_y) if var_x > 1e-12 and var_y > 1e-12 else 0.0
+    return {"slope": slope, "intercept": intercept, "r": r, "r2": r*r}
+
+def _describe_window(dates: List[datetime]) -> str:
+    """
+    Describe the window (days/weeks/periods) based on spacing.
+    """
+    if len(dates) < 2:
+        return "recent period"
+    diffs = [(dates[i] - dates[i-1]).days for i in range(1, len(dates))]
+    step = sorted(diffs)[len(diffs)//2] if diffs else 7
+    if step <= 1:
+        return f"past {min(len(dates), TREND_WINDOW)} days"
+    if 2 <= step <= 5:
+        return f"past {min(len(dates), TREND_WINDOW)} business days"
+    if 6 <= step <= 9:
+        return f"past {min(len(dates), TREND_WINDOW)} weeks"
+    if step <= 31:
+        return f"past {min(len(dates), TREND_WINDOW)} periods"
+    return "recent period"
+
+def _compute_acquisition_trend_insight(dataset_id: str, series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Detect upward trend in tickets (customer acquisition proxy) over last TREND_WINDOW periods.
+    """
+    if len(series) < TREND_MIN_POINTS:
+        return None
+
+    W = min(TREND_WINDOW, len(series))
+    recent = series[-W:]
+    dates = [p["date"] for p in recent]
+    y = [float(p["value"]) for p in recent]
+    x = list(range(len(recent)))
+    reg = _linear_regression(x, y)
+
+    if reg["slope"] <= 0:
+        return None
+
+    first, last = y[0], y[-1]
+    pct = _percent_change(last, first)
+    if pct is None or pct <= 0:
+        return None
+
+    conf = 0.5 + 0.49 * min(1.0, abs(reg["r"]))  # map |r| ∈ [0,1] -> [0.5,0.99]
+    sev = _severity_from_pct(pct)
+    ts = datetime.utcnow().isoformat()
+
+    return {
+        "id": str(uuid.uuid4()),
+        "dataset_id": dataset_id,
+        "type": "trend",
+        "title": "Customer Acquisition Trending Up",
+        "description": f"{round(pct*100, 1)}% increase { _describe_window(dates) }",
+        "confidence": round(conf, 2),
+        "severity": sev,
+        "timestamp": ts,
+    }
+
+async def _publish_insight(dataset_id: str, conn, c, insight: Dict[str, Any]):
+    """
+    Persist the insight and publish it to SSE subscribers.
+    """
+    iid = insight["id"]; ts = insight["timestamp"]
+    c.execute(
+        """INSERT INTO insights (id, dataset_id, type, title, description, confidence, severity, ts)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (iid, dataset_id, insight["type"], insight["title"], insight["description"],
+         float(insight["confidence"]), insight.get("severity"), ts)
+    )
+    conn.commit()
+    await broker.publish(dataset_id, {"insight": insight})
+
+def _publish_from_thread(coro):
+    """
+    Run a coroutine from a worker thread on the main event loop.
+    """
+    if not main_loop:
+        raise RuntimeError("Main event loop not initialized")
+    fut = asyncio.run_coroutine_threadsafe(coro, main_loop)
+    try:
+        fut.result(timeout=5)
+    except Exception:
+        pass
+
+# --------------------------
+# File upload endpoints
+# --------------------------
+@app.post("/upload-file", response_model=UploadResult)
+async def upload_file(file: UploadFile = File(...)):
+    content = await file.read()
+    try:
+        text = content.decode(errors='ignore')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Unable to decode file: {e}")
+
+    dataset_id = str(uuid.uuid4())
+    bytes_len = len(content)
+
+    conn = db(); c = conn.cursor()
+    c.execute("INSERT INTO datasets (id, filename, bytes, created_at) VALUES (?,?,?,?)",
+              (dataset_id, file.filename, bytes_len, datetime.utcnow().isoformat()))
+    conn.commit(); conn.close()
+
+    job_id = str(uuid.uuid4())
+    conn = db(); c = conn.cursor()
+    c.execute("INSERT INTO jobs (id, dataset_id, status, created_at) VALUES (?,?,?,?)",
+              (job_id, dataset_id, "queued", datetime.utcnow().isoformat()))
+    conn.commit(); conn.close()
+
+    # Process asynchronously
+    executor.submit(process_dataset, dataset_id, job_id, text)
+
+    return UploadResult(dataset_id=dataset_id, job_id=job_id, bytes=bytes_len)
+
+@app.post("/upload")
+async def begin_processing(payload: Dict[str, Any]):
+    # Optional explicit trigger, kept for compatibility
+    return {"ok": True}
+
+# --------------------------
+# Dataset processing (DATA-DRIVEN INSIGHTS)
+# --------------------------
+def process_dataset(dataset_id: str, job_id: str, text: str):
+    conn = db(); c = conn.cursor()
+    c.execute("UPDATE jobs SET status=? WHERE id=?", ("processing", job_id))
+    conn.commit()
+
+    # Optional: system info event to let UI know processing began
+    _publish_from_thread(broker.publish(dataset_id, {"insight": {
+        "id": str(uuid.uuid4()), "dataset_id": dataset_id, "type": "info",
+        "title": "Dataset received", "description": "Processing has started",
+        "confidence": 1.0, "severity": "low", "timestamp": datetime.utcnow().isoformat()
+    }}))
+
+    # Parse data & aggregate
+    rows = _parse_csv_rows(text)
+    totals = _aggregate_timeseries(rows)
+    revenue_series = totals["revenue"]
+    tickets_series = totals["tickets"]
+
+    insights: List[Dict[str, Any]] = []
+
+    # Revenue spike insight (if detected)
+    rev_spike = _compute_revenue_spike_insight(dataset_id, revenue_series)
+    if rev_spike:
+        insights.append(rev_spike)
+
+    # Acquisition trend (tickets) (if detected)
+    trend = _compute_acquisition_trend_insight(dataset_id, tickets_series)
+    if trend:
+        insights.append(trend)
+
+    # Persist + publish
+    for ins in insights:
+        _publish_from_thread(_publish_insight(dataset_id, conn, c, ins))
+
+    c.execute("UPDATE jobs SET status=? WHERE id=?", ("done", job_id))
+    conn.commit(); conn.close()
+
+# --------------------------
+# Insights (REST & SSE)
+# --------------------------
+@app.get("/live-insights")
+def get_insights(dataset_id: str):
+    conn = db(); c = conn.cursor()
+    cur = c.execute(
+        "SELECT id, dataset_id, type, title, description, confidence, severity, ts "
+        "FROM insights WHERE dataset_id=? ORDER BY ts DESC", (dataset_id,)
+    )
+    data = []
+    for row in cur.fetchall():
+        d = dict(row)
+        d["timestamp"] = d.pop("ts")
+        data.append(d)
+    conn.close()
+    return {"insights": data}
+
+@app.get("/live-insights/stream")
+async def insights_stream(request: Request, dataset_id: str):
+    q = await broker.subscribe(dataset_id)
+
+    async def event_gen() -> Generator[str, None, None]:
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                data = await q.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        finally:
+            broker.unsubscribe(dataset_id, q)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+# --------------------------
+# Conversational AI (stub: plug in your LLM)
+# --------------------------
+@app.post("/query")
+def query(req: QueryRequest):
+    # TODO: replace this with LLM that uses dataset context and/or vector store
+    answer = f"I received your query: '{req.query}'. I'll analyze the active dataset and return insights."
+    conn = db(); c = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+              (str(uuid.uuid4()), req.session_id, req.dataset_id, "user", req.query, now))
+    c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+              (str(uuid.uuid4()), req.session_id, req.dataset_id, "ai", answer, now))
+    conn.commit(); conn.close()
+    return {"response": answer}
+
+@app.get("/chat-messages")
+def list_chat(session_id: Optional[str] = None, dataset_id: Optional[str] = None):
+    conn = db(); c = conn.cursor()
+    q = "SELECT id, session_id, dataset_id, role as type, message, ts as timestamp FROM chat WHERE 1=1"
+    params: List[Any] = []
+    if session_id: q += " AND session_id=?"; params.append(session_id)
+    if dataset_id: q += " AND dataset_id=?"; params.append(dataset_id)
+    q += " ORDER BY ts ASC"
+    rows = [dict(r) for r in c.execute(q, params).fetchall()]
+    conn.close()
+    return rows
+
+@app.post("/chat-messages")
+def create_chat(msg: Dict[str, Any]):
+    conn = db(); c = conn.cursor()
+    c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+              (str(uuid.uuid4()), msg.get("session_id"), msg.get("dataset_id"), msg.get("type"),
+               msg.get("message"), datetime.utcnow().isoformat()))
+    conn.commit(); conn.close()
+    return {"ok": True}
+
+# --------------------------
+# HITL / RAA
+# --------------------------
+@app.post("/toggle-hitl")
+def toggle_hitl(body: ToggleHITL):
+    conn = db(); c = conn.cursor()
+    c.execute("UPDATE settings SET v=? WHERE k='hitl'", (json.dumps(body.enabled),))
+    conn.commit(); conn.close()
+    return {"enabled": body.enabled}
+
+@app.get("/pending-reviews")
+def pending_reviews():
+    conn = db(); c = conn.cursor()
+    rows = [dict(r) for r in c.execute(
+        "SELECT id, title, description, confidence, priority, ts FROM reviews ORDER BY ts DESC"
+    ).fetchall()]
+    reviews = [{
+        "id": r["id"], "title": r["title"], "description": r["description"],
+        "confidence": r["confidence"], "priority": r["priority"], "timestamp": r["ts"]
+    } for r in rows]
+    conn.close()
+    return {"reviews": reviews}
+
+@app.post("/review-action")
+def review_action(body: Dict[str, Any]):
+    rid = body.get("review_id")
+    action = body.get("action")
+    conn = db(); c = conn.cursor()
+    c.execute("DELETE FROM reviews WHERE id=?", (rid,))
+    conn.commit(); conn.close()
+    return {"ok": True, "action": action}
+
+@app.post("/raa")
+def trigger_raa():
+    conn = db(); c = conn.cursor()
+    row = c.execute("SELECT v FROM settings WHERE k='hitl'").fetchone()
+    hitl = json.loads(row["v"]) if row else True
+    if hitl:
+        c.execute("""INSERT INTO reviews (id, title, description, confidence, priority, ts)
+                     VALUES (?,?,?,?,?,?)""",
+                  (str(uuid.uuid4()), "Revenue anomaly candidate",
+                   "Detected unusual behavior—awaiting approval", 0.75, "high",
+                   datetime.utcnow().isoformat()))
+        conn.commit(); conn.close()
+        return {"status": "queued_for_review"}
+    else:
+        conn.close()
+        return {"status": "executed"}
+
+# --------------------------
+# Metrics & Agent status
+# --------------------------
+@app.get("/metrics")
+def metrics():
+    conn = db(); c = conn.cursor()
+    totalUsers = c.execute("SELECT count(*) AS c FROM users").fetchone()["c"]
+    filesUploaded = c.execute("SELECT count(*) AS c FROM datasets").fetchone()["c"]
+    aiQueries = c.execute("SELECT count(*) AS c FROM chat WHERE role='ai'").fetchone()["c"]
+    totalActions = c.execute("SELECT count(*) AS c FROM jobs WHERE status='done'").fetchone()["c"]
+
+    now = datetime.utcnow()
+    seven_days_ago = (now - timedelta(days=7)).isoformat()
+    row = c.execute("SELECT count(*) AS c FROM users WHERE last_active >= ?", (seven_days_ago,)).fetchone()
+    active_users = row["c"] if row else 0
+    engagement = round(100.0 * (active_users / totalUsers), 1) if totalUsers > 0 else 0.0
+
+    conn.close()
+    return {
+        "totalUsers": totalUsers,
+        "engagement": engagement,
+        "filesUploaded": filesUploaded,
+        "aiQueries": aiQueries,
+        "totalActions": totalActions
+    }
+
+@app.get("/agents/status")
+def agent_status():
+    return {
+        "status": "active",
+        "uptime": "99.8%",
+        "lastUpdate": datetime.utcnow().isoformat(),
+        "connections": 3,
+        "processing": 0,
+        "alerts": 0
+    }
