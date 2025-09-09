@@ -5,7 +5,7 @@ services:
     pythonVersion: 3.11
     plan: free
     buildCommand: |
-      pip install --upgrade pip
+      pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
     startCommand: gunicorn -k uvicorn.workers.UvicornWorker app:app --bind 0.0.0.0:$PORT --workers 4
     envVars:
@@ -25,3 +25,4 @@ services:
         value: "test@myapp.local"
       - key: SLACK_WEBHOOK_URL
         sync: false
+
