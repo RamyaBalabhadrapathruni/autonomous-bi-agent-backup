@@ -25,5 +25,23 @@ services:
         value: "test@myapp.local"
       - key: SLACK_WEBHOOK_URL
         sync: false
-
-
+      - key: BI_DB_PATH
+        value: /tmp/bi_agent.db
+      - key: ALLOWED_ORIGINS
+        value: http://localhost,http://127.0.0.1
+      - key: REVENUE_SPIKE_Z
+        value: "1.0"
+      - key: REVENUE_SPIKE_MIN_PCT
+        value: "0.0"
+      - key: TREND_MIN_POINTS
+        value: "3"
+      - key: TREND_WINDOW
+        value: "3"
+      - key: SEVERITY_MED_PCT
+        value: "0.15"
+      - key: SEVERITY_HIGH_PCT
+        value: "0.30"
+      - key: USE_LLM
+        value: "true"
+      - key: ALERT_RECIPIENTS
+        value: you@example.com,team@example.com
