@@ -2,7 +2,8 @@ services:
   - type: web
     name: autonomous-bi-agent
     env: python
-    plan: free   # or "starter" / "standard" depending on your needs
+    pythonVersion: 3.11
+    plan: free
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
@@ -11,9 +12,9 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: HITL_ENABLED
-        value: "true"   # default: HITL mode on, can toggle in UI
+        value: "true"
       - key: SMTP_USERNAME
-        sync: false     # for Mailtrap or your sandbox
+        sync: false
       - key: SMTP_PASSWORD
         sync: false
       - key: SMTP_HOST
@@ -21,6 +22,6 @@ services:
       - key: SMTP_PORT
         value: "2525"
       - key: EMAIL_FROM
-        value: "test@myapp.local"   # added for Mailtrap emails
+        value: "test@myapp.local"
       - key: SLACK_WEBHOOK_URL
         sync: false
