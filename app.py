@@ -1,318 +1,314 @@
-import os
-import uuid
-import json
-import sqlite3
-import smtplib
-import pandas as pd
-from email.mime.text import MIMEText
-from fastapi import FastAPI, UploadFile, File, Query, Form
+# app.py (FastAPI)
+import os, io, csv, json, uuid, time, asyncio
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, Generator, Optional, List
+
+from fastapi import FastAPI, UploadFile, File, Form, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any
-from langchain.agents import initialize_agent, tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
+import sqlite3
 
-# -----------------------------
-# CONFIG
-# -----------------------------
-app = FastAPI(title="Autonomous BI Agent")
+DB_PATH = os.getenv("BI_DB_PATH", "bi_agent.db")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+HITL_DEFAULT = os.getenv("HITL_DEFAULT", "false").lower() == "true"
 
-# Load SMTP environment variables
-SMTP_HOST = os.environ['SMTP_HOST']
-SMTP_PORT = int(os.environ['SMTP_PORT'])
-SMTP_USERNAME = os.environ['SMTP_USERNAME']
-SMTP_PASSWORD = os.environ['SMTP_PASSWORD']
-EMAIL_FROM = os.environ['EMAIL_FROM']
+app = FastAPI(title="Autonomous BI Agent API")
 
-# Enable CORS (so UI can connect)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DB_PATH = "autobi.db"
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+executor = ThreadPoolExecutor(max_workers=4)
 
-# Gemini LLM
-llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+# --------------------------
+# Persistence helpers
+# --------------------------
+def db():
+  conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+  conn.row_factory = sqlite3.Row
+  return conn
 
-# HITL toggle (default ON for safety)
-HITL_ENABLED = True
-ADMIN_KEY = os.getenv("ADMIN_KEY", "demo-admin")
+def init_db():
+  conn = db(); c = conn.cursor()
+  c.execute("""CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)""")
+  c.execute("""INSERT OR IGNORE INTO settings (k, v) VALUES ('hitl', ?)""", (json.dumps(HITL_DEFAULT),))
+  c.execute("""CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY, filename TEXT, bytes INTEGER, created_at TEXT)""")
+  c.execute("""CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, dataset_id TEXT, status TEXT, created_at TEXT)""")
+  c.execute("""CREATE TABLE IF NOT EXISTS insights (id TEXT PRIMARY KEY, dataset_id TEXT, type TEXT, title TEXT, description TEXT, confidence REAL, severity TEXT, ts TEXT)""")
+  c.execute("""CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT, role TEXT, status TEXT, last_active TEXT)""")
+  c.execute("""CREATE TABLE IF NOT EXISTS chat (id TEXT PRIMARY KEY, session_id TEXT, dataset_id TEXT, role TEXT, message TEXT, ts TEXT)""")
+  c.execute("""CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, title TEXT, description TEXT, confidence REAL, priority TEXT, ts TEXT)""")
+  conn.commit(); conn.close()
 
-# SQLite helper
-def _conn():
-    return sqlite3.connect(DB_PATH)
+init_db()
 
-# Ensure tables
-with _conn() as conn:
-    conn.execute("""CREATE TABLE IF NOT EXISTS actions (
-        id TEXT PRIMARY KEY,
-        source_id TEXT,
-        decision TEXT,
-        edited_alert TEXT,
-        decided_by TEXT,
-        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS uploads (
-        id TEXT PRIMARY KEY,
-        filename TEXT,
-        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS pending_reviews (
-        id TEXT PRIMARY KEY,
-        detector TEXT,
-        metric TEXT,
-        group_json TEXT,
-        time_value TEXT,
-        score REAL,
-        criticality REAL,
-        confidence REAL,
-        draft_alert TEXT,
-        status TEXT DEFAULT 'pending',
-        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    conn.commit()
+# --------------------------
+# SSE broker
+# --------------------------
+class Broker:
+  def __init__(self):
+    self._subs: Dict[str, List[asyncio.Queue]] = {}  # key: dataset_id -> list of queues
 
-# Global dataframe
-dataframe: pd.DataFrame = None
+  async def publish(self, dataset_id: str, data: Dict[str, Any]):
+    for q in self._subs.get(dataset_id, []):
+      await q.put(data)
 
-# -----------------------------
-# DETECTION FUNCTIONS
-# -----------------------------
-def detect_univariate_anomalies(df: pd.DataFrame, metric: str) -> Dict[str, Any]:
-    mean_val = df[metric].mean()
-    std_val = df[metric].std()
-    anomalies = df[df[metric] > mean_val + 2 * std_val]
-    return {
-        "metric": metric,
-        "mean": mean_val,
-        "anomalies": anomalies.to_dict(orient="records"),
-        "confidence": 0.95 if not anomalies.empty else 0.7
-    }
+  async def subscribe(self, dataset_id: str) -> asyncio.Queue:
+    q: asyncio.Queue = asyncio.Queue()
+    self._subs.setdefault(dataset_id, []).append(q)
+    return q
 
-def detect_trends(df: pd.DataFrame, metric: str) -> Dict[str, Any]:
-    trend = df[metric].diff().mean()
-    return {
-        "metric": metric,
-        "trend": "increasing" if trend > 0 else "decreasing",
-        "confidence": 0.9
-    }
+  def unsubscribe(self, dataset_id: str, q: asyncio.Queue):
+    arr = self._subs.get(dataset_id, [])
+    if q in arr:
+      arr.remove(q)
 
-# -----------------------------
-# SEND INITIAL RESPONSE
-# -----------------------------
-def send_initial_response(agent: str, message: str, medium: str = "console"):
-    if medium == "console":
-        print(f"[AUTO-RESPONSE] {agent}: {message}")
-    elif medium == "email":
-        msg = MIMEText(message)
-        msg["Subject"] = f"Auto Response from {agent}"
-        msg["From"] = "noreply@autobi.com"
-        msg["To"] = "recipient@demo.com"
-        with smtplib.SMTP("sandbox.smtp.mailtrap.io", 2525) as server:
-            server.login("username", "password")  # replace with Mailtrap creds
-            server.send_message(msg)
-    elif medium == "slack":
-        import requests
-        webhook_url = "https://hooks.slack.com/services/XXXX"
-        requests.post(webhook_url, json={"text": message})
-    return {"status": "sent", "medium": medium, "message": message}
+broker = Broker()
 
-# -----------------------------
-# LANGCHAIN TOOLS
-# -----------------------------
-@tool
-def anomaly_tool(input_str: str) -> str:
-    """
-    Detect univariate anomalies in CSV data.
-    input_str should be a JSON string with keys:
-    {"file_path": "...", "metric": "..."}
-    """
-    args = json.loads(input_str)
-    df = pd.read_csv(args["file_path"])
-    metric = args["metric"]
-    result = detect_univariate_anomalies(df, metric)
-    return json.dumps(result)
+# --------------------------
+# Models
+# --------------------------
+class UploadResult(BaseModel):
+  dataset_id: str
+  job_id: str
+  bytes: int
 
-@tool
-def trend_tool(input_str: str) -> str:
-    """
-    Detect trends (increasing/decreasing) in CSV data.
-    input_str should be a JSON string: {"file_path": "...", "metric": "..."}
-    """
-    args = json.loads(input_str)
-    df = pd.read_csv(args["file_path"])
-    metric = args["metric"]
-    result = detect_trends(df, metric)
-    return json.dumps(result)
+class QueryRequest(BaseModel):
+  query: str
+  session_id: Optional[str] = None
+  dataset_id: Optional[str] = None
 
-# -----------------------------
-# AGENTS
-# -----------------------------
-tools = [anomaly_tool, trend_tool]
+class ToggleHITL(BaseModel):
+  enabled: bool
 
-conversational_agent = initialize_agent(
-    tools, llm, agent="zero-shot-react-description", verbose=True
-)
-
-live_insights_agent = initialize_agent(
-    tools, llm, agent="zero-shot-react-description", verbose=True
-)
-
-def revenue_analysis_agent(df: pd.DataFrame, metric: str):
-    result = detect_univariate_anomalies(df, metric)
-    draft_alert = f"🚨 Revenue anomaly in {metric}! Mean={result['mean']:.2f}, anomalies={len(result['anomalies'])}"
-
-    if result["confidence"] >= 0.9 and result["anomalies"]:
-        if HITL_ENABLED:
-            with _conn() as conn:
-                conn.execute("""INSERT INTO pending_reviews
-                    (id, detector, metric, group_json, time_value, score, criticality, confidence, draft_alert)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (str(uuid.uuid4()), "revenue_detector", metric, "{}", "latest",
-                     0, 1.0, result["confidence"], draft_alert))
-                conn.commit()
-            return {"status": "queued_for_review", "draft_alert": draft_alert, "confidence": result["confidence"]}
-        else:
-            send_initial_response("RAA", draft_alert, medium="console")
-            with _conn() as conn:
-                conn.execute("INSERT INTO actions (id, source_id, decision, edited_alert, decided_by) VALUES (?,?,?,?,?)",
-                    (f"act_{uuid.uuid4().hex[:8]}", "auto", "auto_approved", draft_alert, "agent"))
-                conn.commit()
-            return {"status": "auto_executed", "alert": draft_alert, "confidence": result["confidence"]}
-    return {"status": "no_high_confidence", "confidence": result["confidence"]}
-# app.py (Part 3 of 3)
-
-# -----------------------------
-# FILE UPLOAD
-# -----------------------------
-@app.post("/upload")
+# --------------------------
+# File upload endpoints
+# --------------------------
+@app.post("/upload-file")
 async def upload_file(file: UploadFile = File(...)):
-    global dataframe
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-    dataframe = pd.read_csv(file_path)
-    with _conn() as conn:
-        conn.execute("INSERT INTO uploads (id, filename) VALUES (?,?)", (str(uuid.uuid4()), file.filename))
-        conn.commit()
-    return {"status": "success", "filename": file.filename}
+  content = await file.read()
+  dataset_id = str(uuid.uuid4())
+  bytes_len = len(content)
 
-# -----------------------------
-# QUERY (Conversational Agent)
-# -----------------------------
-@app.post("/query")
-async def query_agent(query: str = Form(...), metric: str = Form("revenue")):
-    if dataframe is None:
-        return {"error": "No data uploaded"}
-    file_path = os.path.join(UPLOAD_DIR, os.listdir(UPLOAD_DIR)[-1])
-    response = conversational_agent.run(f"{query} using {file_path} and metric {metric}")
-    return {"query": query, "response": response}
+  conn = db(); c = conn.cursor()
+  c.execute("INSERT INTO datasets (id, filename, bytes, created_at) VALUES (?,?,?,?)",
+            (dataset_id, file.filename, bytes_len, datetime.utcnow().isoformat()))
+  conn.commit(); conn.close()
 
-# -----------------------------
-# LIVE INSIGHTS
-# -----------------------------
+  job_id = str(uuid.uuid4())
+  conn = db(); c = conn.cursor()
+  c.execute("INSERT INTO jobs (id, dataset_id, status, created_at) VALUES (?,?,?,?)",
+            (job_id, dataset_id, "queued", datetime.utcnow().isoformat()))
+  conn.commit(); conn.close()
+
+  # process in background
+  loop = asyncio.get_running_loop()
+  loop.run_in_executor(executor, process_dataset, dataset_id, job_id, content.decode(errors='ignore'))
+
+  return UploadResult(dataset_id=dataset_id, job_id=job_id, bytes=bytes_len)
+
+@app.post("/upload")
+async def begin_processing(payload: Dict[str, Any]):
+  # If you prefer explicit trigger separate from upload-file
+  return {"ok": True}
+
+def process_dataset(dataset_id: str, job_id: str, text: str):
+  # naive CSV detection + compute toy insights (replace with your logic)
+  conn = db(); c = conn.cursor()
+  c.execute("UPDATE jobs SET status=? WHERE id=?", ("processing", job_id)); conn.commit()
+
+  # emit an initial insight
+  asyncio.run(broker.publish(dataset_id, {"insight": {
+    "id": str(uuid.uuid4()), "dataset_id": dataset_id, "type": "info",
+    "title": "Dataset received", "description": "Processing has started",
+    "confidence": 1.0, "severity": "low", "timestamp": datetime.utcnow().isoformat()
+  }}))
+
+  # Simulate work & generate example insights
+  time.sleep(1.0)
+  ins = [
+    ("anomaly", "Revenue Spike Detected", "15% increase vs prior week", 0.87, "medium"),
+    ("trend", "Customer Acquisition Trending Up", "30% increase past 3 days", 0.92, "low"),
+  ]
+  for typ, title, desc, conf, sev in ins:
+    iid = str(uuid.uuid4()); ts = datetime.utcnow().isoformat()
+    c.execute("""INSERT INTO insights (id, dataset_id, type, title, description, confidence, severity, ts)
+                 VALUES (?,?,?,?,?,?,?,?)""", (iid, dataset_id, typ, title, desc, conf, sev, ts))
+    conn.commit()
+    asyncio.run(broker.publish(dataset_id, {"insight": {
+      "id": iid, "type": typ, "title": title, "description": desc, "confidence": conf,
+      "severity": sev, "timestamp": ts
+    }}))
+    time.sleep(0.6)
+
+  c.execute("UPDATE jobs SET status=? WHERE id=?", ("done", job_id)); conn.commit(); conn.close()
+
+# --------------------------
+# Insights
+# --------------------------
 @app.get("/live-insights")
-async def live_insights(metric: str = "revenue"):
-    if dataframe is None:
-        return {"error": "No data uploaded"}
-    file_path = os.path.join(UPLOAD_DIR, os.listdir(UPLOAD_DIR)[-1])
-    response = live_insights_agent.run(f"Find anomalies and trends in {metric} using {file_path}")
-    return {"metric": metric, "insights": response}
+def get_insights(dataset_id: str):
+  conn = db(); c = conn.cursor()
+  cur = c.execute("SELECT id, dataset_id, type, title, description, confidence, severity, ts FROM insights WHERE dataset_id=? ORDER BY ts DESC", (dataset_id,))
+  data = [dict(row) | {"timestamp": row["ts"]} for row in cur.fetchall()]
+  conn.close()
+  return {"insights": data}
 
-# -----------------------------
-# REVENUE ANALYSIS AGENT
-# -----------------------------
-@app.get("/raa")
-async def raa(metric: str = "revenue"):
-    if dataframe is None:
-        return {"error": "No data uploaded"}
-    result = revenue_analysis_agent(dataframe, metric)
-    return result
+@app.get("/live-insights/stream")
+async def insights_stream(request: Request, dataset_id: str):
+  q = await broker.subscribe(dataset_id)
 
-# -----------------------------
-# AGENT FEED
-# -----------------------------
-@app.get("/agent-feed")
-async def agent_feed():
-    agents = [
-        {"id": 1, "name": "Conversational Agent", "type": "Q&A", "status": "online"},
-        {"id": 2, "name": "Live Insights Agent", "type": "Pattern/Anomaly", "status": "online"},
-        {"id": 3, "name": "Revenue Analysis Agent", "type": "Alerts", "status": "online"}
-    ]
-    return {"agents": agents}
-
-# -----------------------------
-# PENDING REVIEWS
-# -----------------------------
-@app.get("/pending-reviews")
-async def pending_reviews():
-    with _conn() as conn:
-        rows = conn.execute("SELECT * FROM pending_reviews WHERE status='pending'").fetchall()
-        cols = [c[1] for c in conn.execute("PRAGMA table_info(pending_reviews)")]
-    return {"pending": [dict(zip(cols, row)) for row in rows]}
-
-# -----------------------------
-# REVIEW ACTION
-# -----------------------------
-@app.post("/review-action")
-async def review_action(index: str = Form(...), decision: str = Form(...), edited_alert: str = Form("")):
-    with _conn() as conn:
-        row = conn.execute("SELECT * FROM pending_reviews WHERE id=?", (index,)).fetchone()
-        if not row:
-            return {"error": "Invalid index"}
-        if decision == "approve":
-            conn.execute("INSERT INTO actions (id, source_id, decision, edited_alert, decided_by) VALUES (?,?,?,?,?)",
-                (f"act_{uuid.uuid4().hex[:8]}", index, decision, edited_alert or row[8], "human"))
-            conn.execute("UPDATE pending_reviews SET status='approved' WHERE id=?", (index,))
-        elif decision == "reject":
-            conn.execute("UPDATE pending_reviews SET status='rejected' WHERE id=?", (index,))
-        conn.commit()
-    return {"status": "processed", "decision": decision}
-
-# -----------------------------
-# TOGGLE HITL
-# -----------------------------
-@app.post("/toggle-hitl")
-async def toggle_hitl(enable: bool = Form(...), admin_key: str = Form(...)):
-    global HITL_ENABLED
-    if admin_key != ADMIN_KEY:
-        return {"error": "Unauthorized"}
-    HITL_ENABLED = enable
-    mode = "Human-in-the-Loop" if enable else "Autonomous"
-    return {"status": "ok", "HITL_ENABLED": HITL_ENABLED, "mode": mode}
-
-# -----------------------------
-# HITL STATUS
-# -----------------------------
-@app.get("/hitl-status")
-async def hitl_status():
-    mode = "Human-in-the-Loop" if HITL_ENABLED else "Autonomous"
-    return {"HITL_ENABLED": HITL_ENABLED, "mode": mode}
-
-@app.get("/")
-async def read_root():
-    return {"message": "Hello! App is running."}
-
-@app.get("/send-test-email")
-async def send_test_email():
+  async def event_gen() -> Generator[str, None, None]:
     try:
-        msg = EmailMessage()
-        msg['Subject'] = 'Test Email from FastAPI'
-        msg['From'] = EMAIL_FROM
-        msg['To'] = 'recipient@example.com'  # any email for testing
-        msg.set_content('Hello from Mailtrap SMTP!')
+      while True:
+        if await request.is_disconnected():
+          break
+        data = await q.get()
+        yield f"data: {json.dumps(data)}\n\n"
+    finally:
+      broker.unsubscribe(dataset_id, q)
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
+  return StreamingResponse(event_gen(), media_type="text/event-stream")
 
-        return {"status": "success", "message": "Email sent!"}
+# --------------------------
+# Conversational AI
+# --------------------------
+@app.post("/query")
+def query(req: QueryRequest):
+  # TODO: plug in your LLM with dataset context
+  answer = f"I received your query: '{req.query}'. I will analyze the currently active dataset and report back."
+  conn = db(); c = conn.cursor()
+  now = datetime.utcnow().isoformat()
+  c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+            (str(uuid.uuid4()), req.session_id, req.dataset_id, "user", req.query, now))
+  c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+            (str(uuid.uuid4()), req.session_id, req.dataset_id, "ai", answer, now))
+  conn.commit(); conn.close()
+  return {"response": answer}
 
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+@app.get("/chat-messages")
+def list_chat(session_id: Optional[str] = None, dataset_id: Optional[str] = None):
+  conn = db(); c = conn.cursor()
+  q = "SELECT id, session_id, dataset_id, role as type, message, ts as timestamp FROM chat WHERE 1=1"
+  params = []
+  if session_id: q += " AND session_id=?"; params.append(session_id)
+  if dataset_id: q += " AND dataset_id=?"; params.append(dataset_id)
+  q += " ORDER BY ts ASC"
+  rows = [dict(r) for r in c.execute(q, params).fetchall()]
+  conn.close()
+  return rows
+
+@app.post("/chat-messages")
+def create_chat(msg: Dict[str, Any]):
+  conn = db(); c = conn.cursor()
+  c.execute("INSERT INTO chat (id, session_id, dataset_id, role, message, ts) VALUES (?,?,?,?,?,?)",
+            (str(uuid.uuid4()), msg.get("session_id"), msg.get("dataset_id"), msg.get("type"), msg.get("message"), datetime.utcnow().isoformat()))
+  conn.commit(); conn.close()
+  return {"ok": True}
+
+# --------------------------
+# HITL / RAA
+# --------------------------
+@app.post("/toggle-hitl")
+def toggle_hitl(body: ToggleHITL):
+  conn = db(); c = conn.cursor()
+  c.execute("UPDATE settings SET v=? WHERE k='hitl'", (json.dumps(body.enabled),))
+  conn.commit(); conn.close()
+  return {"enabled": body.enabled}
+
+@app.get("/pending-reviews")
+def pending_reviews():
+  conn = db(); c = conn.cursor()
+  rows = [dict(r) for r in c.execute("SELECT id, title, description, confidence, priority, ts FROM reviews ORDER BY ts DESC").fetchall()]
+  # shape for UI
+  reviews = [{
+    "id": r["id"], "title": r["title"], "description": r["description"],
+    "confidence": r["confidence"], "priority": r["priority"], "timestamp": r["ts"]
+  } for r in rows]
+  conn.close()
+  return {"reviews": reviews}
+
+@app.post("/review-action")
+def review_action(body: Dict[str, Any]):
+  rid = body.get("review_id")
+  action = body.get("action")
+  conn = db(); c = conn.cursor()
+  c.execute("DELETE FROM reviews WHERE id=?", (rid,))
+  conn.commit(); conn.close()
+  # Log the decision elsewhere if needed
+  return {"ok": True, "action": action}
+
+@app.post("/raa")
+def trigger_raa():
+  # auto-create sample review (if HITL enabled) or auto-execute
+  conn = db(); c = conn.cursor()
+  # read HITL
+  row = c.execute("SELECT v FROM settings WHERE k='hitl'").fetchone()
+  hitl = json.loads(row["v"]) if row else True
+  if hitl:
+    c.execute("INSERT INTO reviews (id, title, description, confidence, priority, ts) VALUES (?,?,?,?,?,?)",
+              (str(uuid.uuid4()), "High Revenue Anomaly Alert", "Detected 15% spike—needs approval", 0.89, "high", datetime.utcnow().isoformat()))
+    conn.commit(); conn.close()
+    return {"status": "queued_for_review"}
+  else:
+    # perform the action now (placeholder)
+    conn.close()
+    return {"status": "executed"}
+  
+# --------------------------
+# Users & Metrics & Status
+# --------------------------
+@app.get("/metrics")
+def metrics():
+  conn = db(); c = conn.cursor()
+  totalUsers = c.execute("SELECT count(*) AS c FROM users").fetchone()["c"]
+  filesUploaded = c.execute("SELECT count(*) AS c FROM datasets").fetchone()["c"]
+  aiQueries = c.execute("SELECT count(*) AS c FROM chat WHERE role='ai'").fetchone()["c"]
+  totalActions = c.execute("SELECT count(*) AS c FROM jobs WHERE status='done'").fetchone()["c"]
+  # TODO: compute real engagement
+  result = {"totalUsers": totalUsers, "engagement": 94.2, "filesUploaded": filesUploaded, "aiQueries": aiQueries, "totalActions": totalActions}
+  conn.close()
+  return result
+
+@app.get("/agents/status")
+def agent_status():
+  # Replace with real signals from your workers
+  return {"status": "active", "uptime": "99.8%", "lastUpdate": datetime.utcnow().isoformat(), "connections": 3, "processing": 0, "alerts": 0}
+
+# Users CRUD for BIUser
+@app.get("/users")
+def list_users(order: Optional[str] = None):
+  conn = db(); c = conn.cursor()
+  rows = [dict(r) for r in c.execute("SELECT id, name, email, role, status, last_active FROM users").fetchall()]
+  conn.close()
+  return rows
+
+@app.post("/users")
+def create_user(body: Dict[str, Any]):
+  conn = db(); c = conn.cursor()
+  uid = str(uuid.uuid4())
+  c.execute("INSERT INTO users (id, name, email, role, status, last_active) VALUES (?,?,?,?,?,?)",
+            (uid, body["name"], body["email"], body.get("role","analyst"), body.get("status","active"), body.get("last_active", datetime.utcnow().isoformat())))
+  conn.commit(); conn.close()
+  return {"id": uid, **body}
+
+@app.patch("/users/{uid}")
+def update_user(uid: str, patch: Dict[str, Any]):
+  sets = ", ".join([f"{k}=?" for k in patch.keys()])
+  conn = db(); c = conn.cursor()
+  c.execute(f"UPDATE users SET {sets} WHERE id=?", (*patch.values(), uid))
+  conn.commit(); conn.close()
+  return {"id": uid, **patch}
+
+@app.delete("/users/{uid}")
+def delete_user(uid: str):
+  conn = db(); c = conn.cursor()
+  c.execute("DELETE FROM users WHERE id=?", (uid,))
+  conn.commit(); conn.close()
+  return {"ok": True}
