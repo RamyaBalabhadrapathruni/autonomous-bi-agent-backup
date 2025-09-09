@@ -79,7 +79,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-
+)
 
 executor = ThreadPoolExecutor(max_workers=4)
 main_loop: Optional[asyncio.AbstractEventLoop] = None
