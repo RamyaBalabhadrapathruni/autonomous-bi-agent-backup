@@ -7,7 +7,7 @@ from typing import Dict, Any, Generator, Optional, List, Tuple
 
 import smtplib
 from email.mime.text import MIMEText
-
+from fastapi import Body
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
