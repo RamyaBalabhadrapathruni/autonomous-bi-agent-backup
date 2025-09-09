@@ -64,15 +64,22 @@ if USE_LLM and GEMINI_API_KEY:
 # --------------------------
 # App & CORS
 # --------------------------
-app = FastAPI(title="Autonomous BI Agent API")
+
+app = FastAPI(
+    title="Autonomous BI Agent API",
+    docs_url="/docs",
+    redoc_url=None,
+    openapi_url="/openapi.json",
+    redirect_slashes=False,  
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS or ["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+
 
 executor = ThreadPoolExecutor(max_workers=4)
 main_loop: Optional[asyncio.AbstractEventLoop] = None
