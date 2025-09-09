@@ -1,7 +1,6 @@
 # --- Web framework ---
 fastapi==0.112.2
 uvicorn==0.23.2
-python-dotenv==1.1.1
 
 # --- Core data libs ---
 pandas==2.2.3 
@@ -20,10 +19,11 @@ openpyxl==3.1.5
 pyarrow==17.0.0
 
 # --- Config ---
-python-dotenv==1.0.1
+python-dotenv==1.1.1
 
 # --- Integrations ---
 requests==2.32.3
+
 
 
 
