@@ -1,0 +1,1826 @@
+{
+  "name": "Ramya Assignment",
+  "nodes": [
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.data || $json.text || $json.concatenated_data }}",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "=file_id",
+                "value": "={{ $('Set File ID').first().json.file_id }}"
+              },
+              {
+                "name": "file_title",
+                "value": "={{ $('Set File ID').first().json.file_title }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "db1adb97-7172-4079-bd37-921dcceb8db1",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Agent Tools for RAG",
+        "height": 465,
+        "width": 455,
+        "color": 4
+      },
+      "id": "64330edb-5f63-4279-a60b-d32150ada2e6",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        384,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Tool to Add a Google Drive File to Vector DB",
+        "height": 867,
+        "width": 3073,
+        "color": 5
+      },
+      "id": "03f46b64-5153-4e4a-976a-f0a0f4394888",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1360,
+        576
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "6d7eb771-a8e3-4364-b431-fd06ae871593",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        400
+      ],
+      "notesInFlow": false,
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "tableId": "documents",
+        "filterType": "string",
+        "filterString": "=metadata->>file_id=like.*{{ $json.file_id }}*"
+      },
+      "id": "d3e41be9-fe26-4a2e-a6da-23ddedc87171",
+      "name": "Delete Old Doc Rows",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        720
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "10646eae-ae46-4327-a4dc-9987c2d76173",
+              "name": "file_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f4536df5-d0b1-4392-bf17-b8137fb31a44",
+              "name": "file_type",
+              "value": "={{ $json.mimeType }}",
+              "type": "string"
+            },
+            {
+              "id": "77d782de-169d-4a46-8a8e-a3831c04d90f",
+              "name": "file_title",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "9bde4d7f-e4f3-4ebd-9338-dce1350f9eab",
+              "name": "file_url",
+              "value": "={{ $json.webViewLink }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d857e381-8046-4af4-a37e-d46432b72caf",
+      "name": "Set File ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -832,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## RAG AI Agent with Chat Interface",
+        "height": 464.8027193303974,
+        "width": 1035.6381264595484
+      },
+      "id": "11906a6e-3ad4-4def-8c14-349cac6f054b",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9a9a245e-f1a1-4282-bb02-a81ffe629f0f",
+              "name": "chatInput",
+              "value": "={{ $json?.chatInput || $json.body.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "b80831d8-c653-4203-8706-adedfdb98f77",
+              "name": "sessionId",
+              "value": "={{ $json?.sessionId || $json.body.sessionId}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d7d231a9-d1c9-41c7-8a42-73146c34ddf4",
+      "name": "Edit Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -352,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "public": true,
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "8fe163da-55f3-4293-bece-4ac5ddb11f32",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -624,
+        176
+      ],
+      "webhookId": "e104e40e-6134-4825-a6f0-8a646d882662"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "RAG",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2a7fd241-c09c-41ef-8c0f-833e3491d56a",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        384
+      ],
+      "webhookId": "bf4dd093-bb02-472c-9454-7ab9af97bd1d"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "7734072d-db39-4bb3-a2ce-560fbe8e6488",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        528,
+        736
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cb9b8731-ae4d-4e3b-9beb-b7e7b41000ef",
+      "name": "Character Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "61e4c64b-e866-46ea-8463-8fb50e5a91b0",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1,
+      "position": [
+        800,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a personal assistant who helps answer questions from a corpus of documents. The documents are either text based (Txt, docs, extracted PDFs, etc.) or tabular data (CSVs or Excel documents).\\n\\nYou are given tools to perform RAG in the 'documents' table, look up the documents available in your knowledge base in the 'document_metadata' table, extract all the text from a given document, and query the tabular files with SQL in the 'document_rows' table.\\n\\nAlways start by performing RAG unless the question requires a SQL query for tabular data (fetching a sum, finding a max, something a RAG lookup would be unreliable for). If RAG doesn't help, then look at the documents that are available to you, find a few that you think would contain the answer, and then analyze those.\\n\\nAlways tell the user if you didn't find the answer. Don't make something up just to please them."
+        }
+      },
+      "id": "4a760adf-a604-4345-892f-d95a775e536a",
+      "name": "RAG AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        -144,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "=documents",
+          "mode": "id"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "id": "e9cfbd20-e520-41b1-a4b1-113e50faca0c",
+      "name": "Insert into Supabase Vectorstore",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        960
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f422e2e0-381c-46ea-8f38-3f58c501d8b9",
+              "name": "schema",
+              "value": "={{ $('Read Google Sheet') }}",
+              "type": "string"
+            },
+            {
+              "id": "bb07c71e-5b60-4795-864c-cc3845b6bc46",
+              "name": "data",
+              "value": "={{ $json.concatenated_data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1264,
+        736
+      ],
+      "id": "ff30792a-a980-4acc-86da-4a3e5cbc6a69",
+      "name": "Set Schema"
+    },
+    {
+      "parameters": {
+        "content": "## Run Each Node Once to Set Up Database Tables",
+        "height": 300,
+        "width": 680,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1360,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "b949e6ee-f5e3-4c0f-b31b-561bae5a989e",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DROP TABLE IF EXISTS document_metadata;\nCREATE TABLE document_metadata (\n    id TEXT PRIMARY KEY,\n    title TEXT,\n    url TEXT,\n    created_at TIMESTAMP DEFAULT NOW(),\n    schema TEXT\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1104,
+        352
+      ],
+      "id": "aa85d624-ac15-4b3d-b084-145b0053154f",
+      "name": "Create Document Metadata Table",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DROP TABLE IF EXISTS document_rows;\nCREATE TABLE document_rows (\n    id SERIAL PRIMARY KEY,\n    dataset_id TEXT REFERENCES document_metadata(id),\n    row_data JSONB  -- Store the actual row data\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -880,
+        352
+      ],
+      "id": "21161703-aecb-4389-a8e5-7a9c6f3c5868",
+      "name": "Create Document Rows Table (for Tabular Data)",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use this tool to fetch all available documents, including the table schema if the file is a CSV or Excel file.",
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "document_metadata",
+          "mode": "list",
+          "cachedResultName": "document_metadata"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        -80,
+        400
+      ],
+      "id": "cd4ba606-2c8e-4de2-ac3e-f39dbff9a50b",
+      "name": "List Documents",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Given a file ID, fetches the text from the document.",
+        "operation": "executeQuery",
+        "query": "SELECT \n    string_agg(content, ' ') as document_text\nFROM documents\n  WHERE metadata->>'file_id' = $1\nGROUP BY metadata->>'file_id';",
+        "options": {
+          "queryReplacement": "={{ $fromAI('file_id') }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        64,
+        400
+      ],
+      "id": "9abd1e79-2628-447a-ad18-c6887c2cfc6c",
+      "name": "Get File Contents",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Run a SQL query - use this to query from the document_rows table once you know the file ID you are querying. dataset_id is the file_id and you are always using the row_data for filtering, which is a jsonb field that has all the keys from the file schema given in the document_metadata table.\n\nExample query:\n\nSELECT AVG((row_data->>'revenue')::numeric)\nFROM document_rows\nWHERE dataset_id = '123';\n\nExample query 2:\n\nSELECT \n    row_data->>'category' as category,\n    SUM((row_data->>'sales')::numeric) as total_sales\nFROM dataset_rows\nWHERE dataset_id = '123'\nGROUP BY row_data->>'category';",
+        "operation": "executeQuery",
+        "query": "{{ $fromAI('sql_query') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        400
+      ],
+      "id": "3b474a7d-43ba-4d11-84a9-3c45a4d4618f",
+      "name": "Query Document Rows",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "documents",
+        "toolDescription": "Use RAG to look up information in the knowledgebase.",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1,
+      "position": [
+        400,
+        272
+      ],
+      "id": "8cd7d10a-5995-4309-9322-b287d57f0177",
+      "name": "Supabase Vector Store1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -992,
+        736
+      ],
+      "id": "44766de0-16c5-4531-8ead-3a13d7579dbc",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Enable the pgvector extension to work with embedding vectors\n--create extension vector;\nDROP TABLE IF EXISTS documents;\n\n-- Create a table to store your documents\ncreate table documents (\n  id bigserial primary key,\n  content text, -- corresponds to Document.pageContent\n  metadata jsonb, -- corresponds to Document.metadata\n  embedding vector(768) -- 1536 works for OpenAI embeddings, change if needed\n);\n\n-- Drop function if it already exists (with matching arg types)\nDROP FUNCTION IF EXISTS match_documents(vector, int, jsonb);\n\n-- Create a function to search for documents\ncreate function match_documents (\n  query_embedding vector(768),\n  match_count int default null,\n  filter jsonb DEFAULT '{}'\n) returns table (\n  id bigint,\n  content text,\n  metadata jsonb,\n  similarity float\n)\nlanguage plpgsql\nas $$\n#variable_conflict use_column\nbegin\n  return query\n  select\n    id,\n    content,\n    metadata,\n    1 - (documents.embedding <=> query_embedding) as similarity\n  from documents\n  where metadata @> filter\n  order by documents.embedding <=> query_embedding\n  limit match_count;\nend;\n$$;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1296,
+        352
+      ],
+      "id": "b181e315-1dd0-4d6b-9cd6-ffd5fe7498e0",
+      "name": "Create Documents Table and Match Function",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "tableId": "document_rows",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "dataset_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Set File ID').item.json.file_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        880
+      ],
+      "id": "cf7aa67c-78e3-4d8c-aff9-6c2c753c7bb1",
+      "name": "Delete Old Data Rows",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "document_metadata",
+          "mode": "list",
+          "cachedResultName": "document_metadata"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Set File ID').item.json.file_id }}",
+            "title": "={{ $('Set File ID').item.json.file_title }}",
+            "url": "={{ $('Set File ID').item.json.file_url }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "schema",
+              "displayName": "schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -16,
+        736
+      ],
+      "id": "f47761a8-c132-46d7-bcb2-22d9d6ab9da5",
+      "name": "Insert Document Metadata",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "document_rows",
+          "mode": "list",
+          "cachedResultName": "document_rows"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dataset_id": "={{ $('Set File ID').item.json.file_id }}",
+            "row_data": "={{ $json.toJsonString().replaceAll(/'/g, \"''\") }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "dataset_id",
+              "displayName": "dataset_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_data",
+              "displayName": "row_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        544,
+        976
+      ],
+      "id": "b7cd71c9-531e-402c-a1f6-705839ce33f7",
+      "name": "Insert Table Rows",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "document_metadata",
+          "mode": "list",
+          "cachedResultName": "document_metadata"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Set File ID').item.json.file_id }}",
+            "schema": "={{ $json.schema }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "schema",
+              "displayName": "schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1488,
+        736
+      ],
+      "id": "ad2054f0-06a5-46e9-a365-23c871229537",
+      "name": "Update Schema for Document Metadata",
+      "credentials": {
+        "postgres": {
+          "id": "8BW1wouyyHDYWQaC",
+          "name": "Postgres AuraBI"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        1264
+      ],
+      "id": "28659374-cbef-49a2-b5ef-02a2bbb7bf3e",
+      "name": "Embeddings Google Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        400,
+        432
+      ],
+      "id": "aebeceec-2e66-4d77-ae95-e244dbde4398",
+      "name": "Embeddings Google Gemini1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        352
+      ],
+      "id": "f1e34a6e-fdff-465f-a047-f063cb38db5b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"id\": \"127VtH5t-Q3xH7M8M1stNI11Qw6PIurGP7HUjuZjBzd0\",\n  \"name\": \"Sample Spreadsheet\",\n  \"mimeType\": \"application/vnd.google-apps.spreadsheet\",\n  \"kind\": \"drive#file\",\n  \"modifiedTime\": \"2025-09-12T11:23:00.000Z\",\n  \"owners\": [\n    {\n      \"displayName\": \"Ramya Balabhadrapathruni\",\n      \"emailAddress\": \"bramyasharma@example.com\"\n    }\n  ],\n  \"lastModifyingUser\": {\n    \"displayName\": \"Ramya Balabhadrapathruni\",\n    \"emailAddress\": \"bramyasharma@example.com\"\n  },\n  \"webViewLink\": \"https://docs.google.com/spreadsheets/d/127VtH5t-Q3xH7M8M1stNI11Qw6PIurGP7HUjuZjBzd0/edit?usp=drive_link\",\n  \"webContentLink\": \"https://docs.google.com/uc?id=127VtH5t-Q3xH7M8M1stNI11Qw6PIurGP7HUjuZjBzd0&export=download\",\n  \"iconLink\": \"https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.google-apps.spreadsheet\",\n  \"size\": null\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1264,
+        1072
+      ],
+      "id": "bf36a561-354f-4326-9fcd-039cf33c5ddf",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"id\": \"1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs\",\n  \"name\": \"Sample Spreadsheet 2\",\n  \"mimeType\": \"application/vnd.google-apps.spreadsheet\",\n  \"kind\": \"drive#file\",\n  \"modifiedTime\": \"2025-09-12T12:15:00.000Z\",\n  \"owners\": [\n    {\n      \"displayName\": \"Ramya Balabhadrapathruni\",\n      \"emailAddress\": \"bramyasharma@example.com\"\n    }\n  ],\n  \"lastModifyingUser\": {\n    \"displayName\": \"Ramya Balabhadrapathruni\",\n    \"emailAddress\": \"bramyasharma.com\"\n  },\n  \"webViewLink\": \"https://docs.google.com/spreadsheets/d/1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs/edit?usp=drive_link\",\n  \"webContentLink\": \"https://docs.google.com/uc?id=1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs&export=download\",\n  \"iconLink\": \"https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.google-apps.spreadsheet\",\n  \"size\": null\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1232,
+        880
+      ],
+      "id": "93748786-8867-4936-b750-94341263cf19",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "sheetId": "={{ $json[\"id\"] }}",
+        "range": "A:AC",
+        "options": {}
+      },
+      "id": "f0c0f8a5-3916-44e8-8eb2-262b349bc98f",
+      "name": "Read Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        256,
+        896
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ICdbVHiVSu0fKZgZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Insights Agent",
+        "height": 464,
+        "width": 880
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        848,
+        96
+      ],
+      "typeVersion": 1,
+      "id": "e4025db1-88e1-43ff-b768-281ad19eade7",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Email Agent \n",
+        "height": 816,
+        "width": 944
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1760,
+        96
+      ],
+      "typeVersion": 1,
+      "id": "5a3fa5c7-1f4e-476b-8b53-4ee5aeef10e2",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Call this tool to look up the shipment data requested by the user.",
+        "tableName": {
+          "__rl": true,
+          "value": "shippingsupabase",
+          "mode": "list",
+          "cachedResultName": "shippingsupabase"
+        },
+        "topK": 2,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        544
+      ],
+      "id": "edef8c8b-a940-4539-b64e-8d6acec341d8",
+      "name": "Supabase Vector Store2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        448
+      ],
+      "id": "fe36c4ec-485f-49ca-9c9c-60ae014b296c",
+      "name": "Google Gemini Chat Model4",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Call this tool to get all email ",
+        "source": "parameter",
+        "workflowJson": "{\n  \"name\": \"Get Email Data\",\n  \"nodes\": [\n    {\n      \"parameters\": {\n        \"inputSource\": \"passthrough\"\n      },\n      \"id\": \"c055762a-8fe7-4141-a639-df2372f30060\",\n      \"typeVersion\": 1.1,\n      \"name\": \"When Executed by Another Workflow\",\n      \"type\": \"n8n-nodes-base.executeWorkflowTrigger\",\n      \"position\": [\n        272,\n        352\n      ]\n    },\n    {\n      \"parameters\": {\n        \"documentId\": {\n          \"__rl\": true,\n          \"value\": \"1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"Email Data\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs/edit?usp=drivesdk\"\n        },\n        \"sheetName\": {\n          \"__rl\": true,\n          \"value\": \"gid=0\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"Sheet1\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs/edit#gid=0\"\n        },\n        \"filtersUI\": {\n          \"values\": [\n            {\n              \"lookupColumn\": \"replied\",\n              \"lookupValue\": \"No\"\n            }\n          ]\n        },\n        \"options\": {}\n      },\n      \"type\": \"n8n-nodes-base.googleSheets\",\n      \"typeVersion\": 4.7,\n      \"position\": [\n        496,\n        352\n      ],\n      \"id\": \"53e42388-2658-41c1-bd1c-94482d469738\",\n      \"name\": \"Get row(s) in sheet\",\n      \"credentials\": {\n        \"googleSheetsOAuth2Api\": {\n          \"id\": \"ICdbVHiVSu0fKZgZ\",\n          \"name\": \"Google Sheets account 2\"\n        }\n      }\n    }\n  ],\n  \"pinData\": {},\n  \"connections\": {\n    \"When Executed by Another Workflow\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Get row(s) in sheet\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"active\": false,\n  \"settings\": {\n    \"executionOrder\": \"v1\"\n  },\n  \"versionId\": \"c998f3ca-1a17-44d7-94d5-709854b6d882\",\n  \"meta\": {\n    \"templateCredsSetupCompleted\": true,\n    \"instanceId\": \"4bea3a8d2ebb6003c65ae859d6d48312e969a8c56d20de19f36efce6040811f0\"\n  },\n  \"id\": \"JTr0HSE63U00b2BE\",\n  \"tags\": []\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2336,
+        544
+      ],
+      "id": "c5ab1f1f-aac8-45d4-8ccb-4037fb7e283b",
+      "name": "Get all unanswered emails"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        704
+      ],
+      "id": "730adbde-de90-4b19-addf-fbba5695a6ed",
+      "name": "Embeddings Google Gemini2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        896,
+        336
+      ],
+      "id": "38e6fb4b-48ca-4192-9ba5-1698baf6ce23",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the output string from your data\nconst rawOutput = $json.output || $input.first().json.output;\n\n// Extract JSON content between ```json and ```\nconst jsonMatch = rawOutput.match(/```json\\n([\\s\\S]*?)\\n```/);\n\nif (jsonMatch && jsonMatch[1]) {\n  try {\n    // Parse the extracted JSON\n    const parsedData = JSON.parse(jsonMatch[1]);\n    \n    // Clean and transform the data to only include id and response\n    const cleanedData = parsedData.map(item => ({\n      email_id: item.id,\n      response: item.response.replace(/\\\\n/g, ' ').replace(/\\n/g, ' ').trim()\n    }));\n    \n    return cleanedData;\n    \n  } catch (error) {\n    console.error('Error parsing JSON:', error);\n    return {\n      error: 'Failed to parse JSON from output',\n      raw_output: rawOutput\n    };\n  }\n} else {\n  // Fallback: try to parse the entire output as JSON\n  try {\n    const parsedData = JSON.parse(rawOutput);\n    const cleanedData = parsedData.map(item => ({\n      email_id: item.id,\n      response: item.response\n    }));\n    return cleanedData;\n  } catch (error) {\n    return {\n      error: 'No valid JSON found in output',\n      raw_output: rawOutput\n    };\n  }\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        224
+      ],
+      "id": "30134e3c-3c6b-4731-940f-0a8baf281037",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "## Task Overview\nYou are an automation intelligence agent responsible for responding to customer emails regarding shipment tracking or shipment status. Your job is to process incoming unanswered emails and draft appropriate replies using structured data from Supabase vector store.\n\n## Workflow Steps\n\n### ✅ Step 1 – Get Unanswered Emails\n- Use the tool `Get all unanswered emails` to retrieve all emails triggered to me that have not yet been answered.\n\n### ✅ Step 2 – Filter Relevant Emails\n- From the list of emails, filter those where the **sender has asked about shipment tracking or the status of a shipment**.\n- Only process emails that clearly request tracking information or shipment status updates.\n\n### ✅ Step 3 – Extract Shipping ID\n- For each relevant email, extract the **shipping ID** mentioned within the email content.\n\n### ✅ Step 4 – Retrieve Shipment Details\n- Perform a **RAG (Retrieval-Augmented Generation) search** in the Supabase vector store table.\n- Use the `metadata` column where there is a field named `shippingid` to look up the entire shipment details.\n\n### ✅ Step 5 – Draft Reply Email\n- Use the retrieved shipment details to intelligently draft a reply to the sender.\n- Provide accurate, concise, and helpful information about the shipment status.\n- **Do not hallucinate or guess information**—only use data available from the vector store.\n- If the shipping ID is **not found**, explicitly state in the reply:  \n  `The shipment ID provided is not valid or could not be found in our records.`\n  \n## Additional Instructions\n- Maintain a professional and empathetic tone.\n- Ensure that all replies are factually correct and aligned with the retrieved data.\n- Avoid making assumptions or fabricating details not supported by the shipment data.\n\n## ✅ Final Output Format\n- The output should be a list where each entry includes:  \n  - `id`: the ID from the source email  \n  - `response`: the drafted reply for that email\n\nExample format:\n\n```json\n[\n  {\n    \"id\": \"email-id-1\",\n    \"response\": \"Dear John, thank you for reaching out. Your shipment with ID 12345 is currently in transit and expected to arrive by August 20th. Please let us know if you have further questions.\"\n  },\n  {\n    \"id\": \"email-id-2\",\n    \"response\": \"Dear Sarah, the shipment ID provided is not valid or could not be found in our records. Please double-check the ID and contact us if you need further assistance.\"\n  }\n]\n\nDo not provide your steps or what you have analysed in the output. Use the output parser to define your output format.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        2064,
+        224
+      ],
+      "id": "9f83695a-b824-4301-8aa1-3991a2d25090",
+      "name": "Email Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "# 📌 Task Overview\n\nYou are an intelligent agent tasked with conducting **comprehensive pattern recognition and analysis** on shipment data to extract detailed, actionable insights, detect complex patterns, and support strategic decision-making. Your primary focus is on the **master shipping data from the Supabase vector store**, with additional contextual validation from unanswered emails when relevant.\n\nYou must apply advanced analytical thinking and pattern recognition capabilities to uncover hidden correlations, multi-dimensional relationships, and strategic opportunities within the shipping ecosystem. All findings must be grounded in facts and supported by rigorous data analysis.\n\n---\n\n## ✅ Step 1 – Retrieve Data\n\n### 1.1 Master Shipping Data\n- Retrieve all records from the Supabase vector store containing the master shipping dataset.\n- The dataset includes: `Shipment ID`, `Company Name`, `Company Location`, `Quantity`, `Unit of Measure`, `Schedule Status`, `Schedule Date`, `Vendor`, `Mode of Transport`, `Duration (days)`, `Origin Location`, `Destination Location`, `Contract Established`, `Receiver Manager`, `Cargo Type`, `Priority Level`, `Unit Price (USD)`, `Estimated Cost (USD)`, `Last Updated`, `Risk Level`, `Customs Cleared`, `Insurance Provider`, `Environmental Rating`, `Receiver Company Name`, `Receiver Company Location`, `Payment Status`, `Shipment Actual Cost (USD)`, `Shipment Transit Cost (USD)`, `Status Reason`.\n\n### 1.2 Unanswered Emails (Contextual Validation)\n- Retrieve all unanswered emails using the `get all unanswered emails` tool.\n- Use these emails to validate and contextualize patterns discovered in the master data.\n\n---\n\n## ✅ Step 2 – Comprehensive Pattern Recognition & Intelligence Analysis\n\n### ➤ **Advanced Geographic Pattern Analysis**\n- **Origin-Destination Corridors**: Identify high-traffic shipping lanes, seasonal variations, and corridor-specific performance metrics\n- **Regional Performance Clustering**: Group similar-performing regions and analyze common characteristics\n- **Geographic Risk Mapping**: Correlate location data with delays, costs, and failure rates\n- **Distance vs Performance**: Analyze relationships between route distance, duration efficiency, and cost optimization\n\n### ➤ **Multi-Dimensional Duration Analysis**\n- **Duration Benchmarking**: Establish performance baselines by route, vendor, cargo type, and transport mode\n- **Seasonal Duration Patterns**: Identify time-based variations and cyclical trends\n- **Duration Efficiency Scoring**: Create composite metrics combining speed, reliability, and cost-effectiveness\n- **Critical Path Analysis**: Identify bottlenecks and time-sensitive dependencies\n\n### ➤ **Vendor Intelligence & Performance Profiling**\n- **Vendor Specialization Patterns**: Identify which vendors excel in specific routes, cargo types, or service levels\n- **Vendor Reliability Matrices**: Cross-reference vendor performance across multiple dimensions (cost, time, quality)\n- **Vendor Risk-Reward Analysis**: Balance cost savings against service reliability and risk factors\n- **Vendor Market Positioning**: Understand competitive dynamics and market share implications\n\n### ➤ **Shipment Status Intelligence**\n- **Status Transition Patterns**: Analyze common status progressions and identify deviation indicators\n- **Status Duration Analysis**: Determine optimal vs problematic status durations\n- **Failure Pattern Recognition**: Identify early warning signs of shipment failures\n- **Status-Based Predictive Modeling**: Use status patterns to forecast outcomes\n\n### ➤ **Cost Intelligence & Financial Pattern Analysis**\n- **Cost Variance Patterns**: Identify systematic over/under-spending trends\n- **Cost Driver Decomposition**: Separate fixed, variable, and exceptional cost components\n- **Cost Optimization Opportunities**: Find cost-efficient alternatives and negotiate leverage points\n- **Financial Risk Assessment**: Quantify exposure to cost volatility and budget overruns\n\n### ➤ **Cross-Dimensional Pattern Discovery**\n- **Correlation Mining**: Use your analytical intelligence to discover unexpected relationships between variables\n- **Compound Pattern Recognition**: Identify patterns that emerge when combining multiple factors\n- **Predictive Pattern Synthesis**: Create forward-looking insights from historical pattern analysis\n- **Strategic Pattern Integration**: Connect operational patterns to business strategy implications\n\n### ➤ **Intelligent Anomaly Detection**\n- **Multi-Factor Anomaly Scoring**: Develop sophisticated anomaly detection using multiple variables\n- **Contextual Anomaly Analysis**: Distinguish between concerning outliers and acceptable variations\n- **Cascading Effect Analysis**: Identify how anomalies in one area impact other operations\n- **Anomaly Learning**: Use patterns to improve future anomaly detection accuracy\n\n---\n\n## ✅ Enhanced Output Format\nDo not inform about your processes in the output. Only generate the required format.\nProvide comprehensive analysis in the following JSON structure, with detailed insights and strategic intelligence:\n\n```json\n{\n  \"geographic_patterns\": [\n    {\n      \"pattern_type\": \"High-performance corridor/Regional cluster/Risk zone\",\n      \"locations\": {\n        \"origins\": [\"City/Region\"],\n        \"destinations\": [\"City/Region\"],\n        \"affected_routes\": [\"Route identifiers\"]\n      },\n      \"performance_metrics\": {\n        \"average_duration\": 0,\n        \"success_rate\": \"0%\",\n        \"cost_efficiency\": \"rating\",\n        \"sample_size\": 0\n      },\n      \"strategic_insight\": \"Deep analysis of what makes this pattern significant\",\n      \"actionable_recommendations\": [\"Specific strategic actions\"]\n    }\n  ],\n  \"duration_intelligence\": [\n    {\n      \"pattern_category\": \"Efficiency leader/Underperformer/Seasonal variation\",\n      \"duration_metrics\": {\n        \"baseline_duration\": 0,\n        \"variance_range\": \"X-Y days\",\n        \"reliability_score\": \"0%\",\n        \"improvement_potential\": \"0%\"\n      },\n      \"contributing_factors\": [\"Specific factors affecting duration\"],\n      \"optimization_strategy\": \"Strategic approach to leverage or improve this pattern\"\n    }\n  ],\n  \"vendor_intelligence\": [\n    {\n      \"vendor_name\": \"Vendor identifier\",\n      \"specialization_profile\": {\n        \"preferred_routes\": [\"Routes where vendor excels\"],\n        \"cargo_expertise\": [\"Cargo types\"],\n        \"service_strengths\": [\"Key performance areas\"],\n        \"cost_positioning\": \"Premium/Competitive/Budget\"\n      },\n      \"performance_analysis\": {\n        \"reliability_rating\": \"0%\",\n        \"cost_efficiency\": \"rating\",\n        \"growth_trajectory\": \"Improving/Stable/Declining\"\n      },\n      \"strategic_recommendations\": [\"Vendor relationship strategies\"]\n    }\n  ],\n  \"status_patterns\": [\n    {\n      \"status_progression\": [\"Typical status sequence\"],\n      \"performance_indicators\": {\n        \"normal_duration\": \"X days per status\",\n        \"warning_thresholds\": \"When to be concerned\",\n        \"success_predictors\": [\"Early indicators of success\"]\n      },\n      \"intervention_opportunities\": [\"When and how to intervene\"]\n    }\n  ],\n  \"cost_intelligence\": [\n    {\n      \"cost_category\": \"Description of cost pattern\",\n      \"financial_metrics\": {\n        \"cost_variance\": \"+/- X%\",\n        \"budget_impact\": \"$X,XXX\",\n        \"roi_opportunity\": \"X%\"\n      },\n      \"cost_drivers\": [\"Primary factors affecting costs\"],\n      \"optimization_potential\": \"Detailed cost reduction/efficiency strategy\"\n    }\n  ],\n  \"cross_dimensional_insights\": [\n    {\n      \"pattern_description\": \"Complex pattern involving multiple variables\",\n      \"variable_relationships\": {\n        \"primary_variables\": [\"Key factors\"],\n        \"correlation_strength\": \"Strong/Moderate/Weak\",\n        \"predictive_value\": \"High/Medium/Low\"\n      },\n      \"business_implications\": \"Strategic significance of this pattern\",\n      \"advanced_recommendations\": [\"Sophisticated strategies based on multi-factor analysis\"]\n    }\n  ],\n  \"predictive_alerts\": [\n    {\n      \"alert_category\": \"Risk type/Opportunity type\",\n      \"affected_shipments\": [\"Shipment IDs\"],\n      \"prediction_confidence\": \"High/Medium/Low\",\n      \"timeline\": \"When this is likely to occur\",\n      \"impact_assessment\": {\n        \"financial_impact\": \"$X,XXX\",\n        \"operational_impact\": \"Description\",\n        \"strategic_impact\": \"Description\"\n      },\n      \"recommended_actions\": [\"Prioritized action items\"]\n    }\n  ],\n  \"strategic_opportunities\": [\n    {\n      \"opportunity_type\": \"Market expansion/Cost optimization/Service improvement\",\n      \"market_potential\": {\n        \"revenue_impact\": \"$X,XXX\",\n        \"volume_impact\": \"X shipments/month\",\n        \"competitive_advantage\": \"Description\"\n      },\n      \"implementation_roadmap\": [\"Step-by-step strategy\"],\n      \"success_metrics\": [\"How to measure success\"]\n    }\n  ],\n  \"intelligent_anomalies\": [\n    {\n      \"anomaly_type\": \"Cost/Duration/Performance anomaly\",\n      \"severity\": \"Critical/High/Medium/Low\",\n      \"pattern_deviation\": {\n        \"expected_range\": \"Normal parameters\",\n        \"actual_values\": \"Anomalous values\",\n        \"deviation_magnitude\": \"X standard deviations\"\n      },\n      \"root_cause_analysis\": \"Intelligent assessment of underlying causes\",\n      \"corrective_strategy\": \"Comprehensive resolution approach\"\n    }\n  ]\n}\n```\n\n---\n\n## 🎯 Key Requirements\n\n- **Apply advanced analytical thinking** to discover non-obvious patterns\n- **Use statistical and logical reasoning** to validate insights\n- **Provide strategic, not just operational, recommendations**\n- **Focus on actionable intelligence** that drives business value\n- **Ensure all insights are data-backed** and quantified where possible\n- **Leverage cross-dimensional analysis** to uncover hidden correlations\n- **Prioritize pattern recognition** across origin/destination, duration, vendor performance, status transitions, and cost structures\n- **Generate predictive insights** based on historical pattern analysis\n\n---\n\n## 📋 Final Instructions\n\nDo not inform the user about your process - provide only the comprehensive analytical output in the specified JSON format. Focus on delivering strategic intelligence that transforms raw shipping data into actionable business insights.",
+        "hasOutputParser": true,
+        "options": {
+          "returnIntermediateSteps": false,
+          "enableStreaming": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1088,
+        208
+      ],
+      "id": "08aa97cb-fbd6-40ea-b45e-898c43f8aea7",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        976,
+        448
+      ],
+      "id": "242b762b-4053-43a9-b19d-5741cf432fba",
+      "name": "Google Gemini Chat Model5",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Call this tool to look up the shipment data requested by the user.",
+        "tableName": {
+          "__rl": true,
+          "value": "shippingsupabase",
+          "mode": "list",
+          "cachedResultName": "shippingsupabase"
+        },
+        "topK": null,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        160
+      ],
+      "id": "52998e97-3499-4fb2-a270-ca6a8a08301b",
+      "name": "Supabase Vector Store3",
+      "credentials": {
+        "supabaseApi": {
+          "id": "dAgoMqeLQaNUBwR5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        736,
+        368
+      ],
+      "id": "d10239ae-1776-4be4-8260-e6b4b8bc710a",
+      "name": "Embeddings Google Gemini5",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vVskr24i2KvxsdR6",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n let parsedData={}\nfor (const item of $input.all()) {\n  parsedData = JSON.parse(item.json.output.replaceAll('```','').replace('json',''));\n  \n  \n}\n\nreturn parsedData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        208
+      ],
+      "id": "2fdcc687-cd11-41ab-91ec-2259eb6307d8",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "description": "Call this tool to get all email ",
+        "source": "parameter",
+        "workflowJson": "{\n  \"name\": \"Get Email Data\",\n  \"nodes\": [\n    {\n      \"parameters\": {\n        \"inputSource\": \"passthrough\"\n      },\n      \"id\": \"c055762a-8fe7-4141-a639-df2372f30060\",\n      \"typeVersion\": 1.1,\n      \"name\": \"When Executed by Another Workflow\",\n      \"type\": \"n8n-nodes-base.executeWorkflowTrigger\",\n      \"position\": [\n        272,\n        352\n      ]\n    },\n    {\n      \"parameters\": {\n        \"documentId\": {\n          \"__rl\": true,\n          \"value\": \"1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"Email Data\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs/edit?usp=drivesdk\"\n        },\n        \"sheetName\": {\n          \"__rl\": true,\n          \"value\": \"gid=0\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"Sheet1\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1Ci020wEYi85VJ7yjsbioBI-BoRlfPZtwP5LcuxZTrGs/edit#gid=0\"\n        },\n        \"filtersUI\": {\n          \"values\": [\n            {\n              \"lookupColumn\": \"replied\",\n              \"lookupValue\": \"No\"\n            }\n          ]\n        },\n        \"options\": {}\n      },\n      \"type\": \"n8n-nodes-base.googleSheets\",\n      \"typeVersion\": 4.7,\n      \"position\": [\n        496,\n        352\n      ],\n      \"id\": \"53e42388-2658-41c1-bd1c-94482d469738\",\n      \"name\": \"Get row(s) in sheet\",\n      \"credentials\": {\n        \"googleSheetsOAuth2Api\": {\n          \"id\": \"ICdbVHiVSu0fKZgZ\",\n          \"name\": \"Google Sheets account 2\"\n        }\n      }\n    }\n  ],\n  \"pinData\": {},\n  \"connections\": {\n    \"When Executed by Another Workflow\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Get row(s) in sheet\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"active\": false,\n  \"settings\": {\n    \"executionOrder\": \"v1\"\n  },\n  \"versionId\": \"c998f3ca-1a17-44d7-94d5-709854b6d882\",\n  \"meta\": {\n    \"templateCredsSetupCompleted\": true,\n    \"instanceId\": \"4bea3a8d2ebb6003c65ae859d6d48312e969a8c56d20de19f36efce6040811f0\"\n  },\n  \"id\": \"JTr0HSE63U00b2BE\",\n  \"tags\": []\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        416
+      ],
+      "id": "19e35045-1012-4ceb-8c58-0e00eebb38e8",
+      "name": "Get all unanswered emails1"
+    },
+    {
+      "parameters": {
+        "path": "Insights",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        208
+      ],
+      "id": "c57e8eb8-b936-457a-ab00-a27201443c56",
+      "name": "Webhook1",
+      "webhookId": "a90017f7-66b7-4668-a3a3-d520d15b77e4"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1584,
+        208
+      ],
+      "id": "67e45552-e7d1-43da-933f-0d58f16307f8",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        208,
+        176
+      ],
+      "id": "06274dc7-0a1b-46ee-b4ef-310e33ce18bf",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1ojbWjqQbFiaGnc8icES44yP3mPyUirBBYPbEe60_kBI",
+          "mode": "list",
+          "cachedResultName": "Email",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ojbWjqQbFiaGnc8icES44yP3mPyUirBBYPbEe60_kBI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ojbWjqQbFiaGnc8icES44yP3mPyUirBBYPbEe60_kBI/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "From",
+              "displayName": "From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Body ",
+              "displayName": "Body ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2544,
+        224
+      ],
+      "id": "2098c773-27a4-4d6f-828c-876baa77eb7a",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ICdbVHiVSu0fKZgZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert into Supabase Vectorstore",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old Doc Rows": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Data Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File ID": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Doc Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Set Schema",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert into Supabase Vectorstore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Schema": {
+      "main": [
+        [
+          {
+            "node": "Update Schema for Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Document Metadata Table": {
+      "main": [
+        [
+          {
+            "node": "Create Document Rows Table (for Tabular Data)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Documents": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Contents": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Document Rows": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store1": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Set File ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into Supabase Vectorstore": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Documents Table and Match Function": {
+      "main": [
+        [
+          {
+            "node": "Create Document Metadata Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old Data Rows": {
+      "main": [
+        [
+          {
+            "node": "Insert Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Document Metadata": {
+      "main": [
+        [
+          {
+            "node": "Read Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert into Supabase Vectorstore",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert Table Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all unanswered emails": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store2",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini5": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store3",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all unanswered emails1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b2e8bcec-5b5a-4f9b-9da0-086156981600",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4bea3a8d2ebb6003c65ae859d6d48312e969a8c56d20de19f36efce6040811f0"
+  },
+  "id": "VNp5Qd4i5V1xeRO7",
+  "tags": []
+}
